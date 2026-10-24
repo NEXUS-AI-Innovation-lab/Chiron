@@ -1,0 +1,54 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.venv/
+backend/.venv/
+__pycache__/
+*.svs
+*.tiff
+backend/vips/
+backend/openslide_bin/
+node_modules/
+# Données médicales et artefacts générés (ne jamais versionner)
+backend/dzi_data/
+*.tif
+*.dcm
+*.DCM
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Fichiers de verrou Office (créés tant qu'un document est ouvert)
+~$*
+
+
+livrables/
+# Fichiers locaux hors projet
+*.bak
+.obsidian/
+.ruff_cache/
+WiGo-Presentation.pptx

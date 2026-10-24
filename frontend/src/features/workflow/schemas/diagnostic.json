@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "wigo:workflow:diagnostic",
+  "title": "Étape 4 - Diagnostic (Chiron)",
+  "type": "object",
+  "properties": {
+    "hormonalReceptors": {
+      "type": "string",
+      "title": "Récepteurs hormonaux",
+      "x-control": "text"
+    },
+    "diagnosis": {
+      "type": "string",
+      "title": "Diagnostic",
+      "enum": [
+        "benin",
+        "malin",
+        "suspect"
+      ],
+      "x-control": "select",
+      "x-enumLabels": [
+        {
+          "value": "benin",
+          "label": "Bénin"
+        },
+        {
+          "value": "malin",
+          "label": "Malin"
+        },
+        {
+          "value": "suspect",
+          "label": "Suspect/Atypique"
+        }
+      ]
+    },
+    "comments": {
+      "type": "string",
+      "title": "Commentaires",
+      "x-control": "textarea"
+    },
+    "pathologist": {
+      "type": "string",
+      "title": "Pathologiste référent",
+      "x-control": "text"
+    },
+    "validationDate": {
+      "type": "string",
+      "format": "date",
+      "title": "Date de validation",
+      "x-control": "date"
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "x-order": [
+    "hormonalReceptors",
+    "diagnosis",
+    "comments",
+    "pathologist",
+    "validationDate"
+  ],
+  "x-source": {
+    "provider": "olga",
+    "formId": "a81b3f32-1e4c-8888-2222-9ca27a381c03",
+    "formVersion": "1.0.0",
+    "lastUpdated": "2024-12-30"
+  }
+}

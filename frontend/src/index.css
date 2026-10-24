@@ -1,0 +1,604 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Chiron - Système de design
+   --------------------------------------------------------------------------
+   Palette de référence (fournie par le client) :
+     #1e2a3a  encre / barre de navigation   -> texte principal, chrome sombre
+     #46586f  gris-bleu                     -> texte secondaire, libellés
+     #10b981  vert                          -> action principale, validation
+
+   Principe : aucun composant n'écrit une couleur en dur. Tout passe par un
+   jeton sémantique (« surface », « ligne », « encre »…) dont la VALEUR change
+   selon le thème. Basculer clair/sombre ne demande donc de modifier aucun
+   fichier .tsx : seul l'attribut data-theme de <html> change.
+   ========================================================================== */
+
+/* Le variant `dark:` de Tailwind est piloté par l'attribut data-theme posé sur
+   <html> par ThemeProvider, et non par la préférence système : l'utilisateur
+   doit pouvoir forcer un thème. Réservé aux rares cas qu'un jeton ne couvre
+   pas (ombres, opacités). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* --------------------------------------------------------------------------
+   1. Thème clair (défaut)
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  /* Fonds */
+  --wg-canvas: #f4f6f8;        /* fond de page */
+  --wg-surface: #ffffff;       /* cartes, panneaux, modales */
+  --wg-raised: #eef1f5;        /* survol, remplissage discret, champs inactifs */
+
+  /* Traits */
+  --wg-line: #dfe4ea;          /* bordure standard */
+  --wg-line-strong: #c3ccd7;   /* bordure appuyée, séparateur de section */
+
+  /* Texte */
+  --wg-ink: #1e2a3a;           /* titres et texte courant */
+  --wg-muted: #46586f;         /* libellés, texte secondaire */
+  --wg-faint: #7a8799;         /* mentions tertiaires, aides */
+
+  /* Barre de navigation : toujours sombre, c'est le repère fixe de l'app */
+  --wg-nav: #1e2a3a;
+  --wg-nav-ink: #f2f5f8;
+  --wg-nav-muted: #9aa8bb;
+  --wg-nav-line: rgba(255, 255, 255, 0.12);
+
+  /* Action principale */
+  --wg-accent: #10b981;
+  --wg-accent-hover: #0d9b6c;
+  --wg-accent-ink: #ffffff;    /* texte posé SUR le vert plein */
+  --wg-accent-soft: #e6f7f0;   /* fond vert très pâle */
+  --wg-accent-text: #0a7d58;   /* vert lisible sur fond clair */
+
+  /* États */
+  --wg-danger: #c94b4b;
+  --wg-danger-hover: #b03c3c;
+  --wg-danger-soft: #fdecec;
+  --wg-danger-text: #a33434;
+
+  --wg-warn: #b8791f;
+  --wg-warn-soft: #fdf4e5;
+  --wg-warn-text: #8a5a13;
+
+  /* Ombres : discrètes. Une interface épurée se structure par les traits,
+     pas par la profondeur. */
+  /* Rayons : une valeur par NIVEAU, pas une valeur pour tout.
+     La modale flotte (12), la carte est posee (8), le controle est dense (6),
+     l'etiquette est minuscule (4). */
+  --wg-radius-modal: 12px;
+  --wg-radius-card: 8px;
+  --wg-radius-control: 6px;
+  --wg-radius-chip: 4px;
+
+  /* L'ombre est reservee a ce qui flotte REELLEMENT au-dessus du contenu :
+     modales et barres posees sur une image. Une carte ne flotte pas, elle est
+     delimitee par son trait. */
+  --wg-shadow-pop: 0 8px 24px rgba(30, 42, 58, 0.14);
+
+  /* Zone d'affichage des images médicales : sombre dans les DEUX thèmes.
+     Convention radiologique — un fond clair fausse la perception des
+     niveaux de gris et éblouit sur une lame numérisée. */
+  --wg-imaging: #0c1117;
+  --wg-overlay: rgba(22, 32, 44, 0.94);   /* barres flottantes sur l'image */
+  --wg-overlay-line: rgba(255, 255, 255, 0.14);
+  --wg-overlay-ink: #eef2f7;
+  --wg-overlay-muted: #9aa8bb;
+  --wg-overlay-hover: rgba(255, 255, 255, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   2. Thème sombre
+   Les mêmes jetons, d'autres valeurs. #1e2a3a devient la surface des cartes,
+   et le fond de page descend d'un cran pour que les cartes restent lisibles.
+   -------------------------------------------------------------------------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --wg-canvas: #141c26;
+  --wg-surface: #1e2a3a;
+  --wg-raised: #26344a;
+
+  --wg-line: #2f3f54;
+  --wg-line-strong: #46586f;
+
+  --wg-ink: #eef2f7;
+  --wg-muted: #a9b7c9;
+  --wg-faint: #7f8da0;
+
+  --wg-nav: #16202c;
+  --wg-nav-ink: #f2f5f8;
+  --wg-nav-muted: #9aa8bb;
+  --wg-nav-line: rgba(255, 255, 255, 0.10);
+
+  --wg-accent: #10b981;
+  --wg-accent-hover: #34d399;
+  --wg-accent-ink: #06251a;    /* texte foncé sur vert : meilleur contraste */
+  --wg-accent-soft: rgba(16, 185, 129, 0.14);
+  --wg-accent-text: #45d8a4;
+
+  --wg-danger: #d05a5a;
+  --wg-danger-hover: #e07070;
+  --wg-danger-soft: rgba(208, 90, 90, 0.14);
+  --wg-danger-text: #ef9c9c;
+
+  --wg-warn: #d1913a;
+  --wg-warn-soft: rgba(209, 145, 58, 0.14);
+  --wg-warn-text: #e8bb78;
+
+  --wg-shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* --------------------------------------------------------------------------
+   3. Exposition à Tailwind
+   `inline` fait pointer les utilitaires sur var(--wg-*) au lieu d'en copier la
+   valeur : c'est ce qui rend le basculement de thème instantané, sans
+   recompilation ni classe `dark:` dans le JSX.
+   Chaque jeton génère bg-*, text-*, border-*, ring-*, fill-*…
+   -------------------------------------------------------------------------- */
+@theme inline {
+  --color-canvas: var(--wg-canvas);
+  --color-surface: var(--wg-surface);
+  --color-raised: var(--wg-raised);
+
+  --color-line: var(--wg-line);
+  --color-line-strong: var(--wg-line-strong);
+
+  --color-ink: var(--wg-ink);
+  --color-muted: var(--wg-muted);
+  --color-faint: var(--wg-faint);
+
+  --color-nav: var(--wg-nav);
+  --color-nav-ink: var(--wg-nav-ink);
+  --color-nav-muted: var(--wg-nav-muted);
+  --color-nav-line: var(--wg-nav-line);
+
+  --color-accent: var(--wg-accent);
+  --color-accent-hover: var(--wg-accent-hover);
+  --color-accent-ink: var(--wg-accent-ink);
+  --color-accent-soft: var(--wg-accent-soft);
+  --color-accent-text: var(--wg-accent-text);
+
+  --color-danger: var(--wg-danger);
+  --color-danger-hover: var(--wg-danger-hover);
+  --color-danger-soft: var(--wg-danger-soft);
+  --color-danger-text: var(--wg-danger-text);
+
+  --color-warn: var(--wg-warn);
+  --color-warn-soft: var(--wg-warn-soft);
+  --color-warn-text: var(--wg-warn-text);
+
+  --color-imaging: var(--wg-imaging);
+  --color-overlay: var(--wg-overlay);
+  --color-overlay-line: var(--wg-overlay-line);
+  --color-overlay-ink: var(--wg-overlay-ink);
+  --color-overlay-muted: var(--wg-overlay-muted);
+}
+
+/* --------------------------------------------------------------------------
+   4. Base
+   -------------------------------------------------------------------------- */
+@layer base {
+/* Typographie.
+   Choix assume de ne PAS charger de fonte distante : le poste de travail
+   hospitalier est souvent sur un reseau ferme, et une fonte qui ne se charge
+   pas degrade davantage la lecture qu'une fonte systeme bien choisie. On
+   nomme donc explicitement des humanistes a chiffres lisibles, dans l'ordre
+   de preference, plutot que de s'en remettre a `sans-serif`.
+
+   `tabular-nums` est actif sur tout le document : dans un dossier medical, les
+   dates, ages et identifiants sont lus en COLONNE. Des chiffres de largeur
+   egale s'alignent, ce qui rend la fonte a chasse fixe inutile comme
+   decoration. */
+body {
+  margin: 0;
+  background: var(--wg-canvas);
+  color: var(--wg-ink);
+  font-family: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Longueur de ligne : au-dela d'environ 80 signes, l'oeil perd la ligne
+   suivante. S'applique aux blocs de texte suivi, pas aux tableaux. */
+p {
+  max-width: 72ch;
+}
+
+/* Le thème ne doit pas « flasher » pendant la transition. On anime les
+   couleurs, jamais la disposition. */
+body,
+.wg-card,
+.wg-input,
+.wg-btn {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+/* Accessibilité : un anneau de focus visible et unique pour toute l'app.
+   Il est indispensable pour une saisie au clavier en environnement médical
+   (gants, poste partagé). */
+:focus-visible {
+  outline: 2px solid var(--wg-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--wg-accent);
+  color: var(--wg-accent-ink);
+}
+}
+
+/* Barres de défilement discrètes, accordées au thème */
+.custom-scrollbar::-webkit-scrollbar,
+textarea::-webkit-scrollbar,
+ul::-webkit-scrollbar,
+.wg-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb,
+ul::-webkit-scrollbar-thumb,
+.wg-scroll::-webkit-scrollbar-thumb {
+  background: var(--wg-line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-track,
+textarea::-webkit-scrollbar-track,
+ul::-webkit-scrollbar-track,
+.wg-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   5. Classes de composants
+   Écrites en CSS natif (var() direct) plutôt qu'avec @apply : le style d'un
+   bouton est ainsi lisible d'un seul coup d'œil, et il n'existe QU'UN endroit
+   à modifier pour tous les boutons de l'application.
+   -------------------------------------------------------------------------- */
+
+@layer components {
+
+/* --- Carte --- */
+.wg-card {
+  background: var(--wg-surface);
+  border: 1px solid var(--wg-line);
+  border-radius: var(--wg-radius-card);
+}
+
+/* --- Boutons ---
+   Base commune : hauteur, alignement, typographie. Les variantes ne changent
+   que les couleurs. */
+.wg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--wg-radius-control);
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.wg-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Action principale : une seule par écran, en vert */
+.wg-btn-primary {
+  background: var(--wg-accent);
+  color: var(--wg-accent-ink);
+  font-weight: 600;
+}
+.wg-btn-primary:hover:not(:disabled) {
+  background: var(--wg-accent-hover);
+}
+
+/* Action secondaire : contour, pas de remplissage */
+.wg-btn-secondary {
+  background: var(--wg-surface);
+  border-color: var(--wg-line-strong);
+  color: var(--wg-ink);
+}
+.wg-btn-secondary:hover:not(:disabled) {
+  background: var(--wg-raised);
+}
+
+/* Action tertiaire : sans contour, pour les barres d'icônes */
+.wg-btn-quiet {
+  background: transparent;
+  color: var(--wg-muted);
+}
+.wg-btn-quiet:hover:not(:disabled) {
+  background: var(--wg-raised);
+  color: var(--wg-ink);
+}
+
+/* Destructif : jamais rouge plein tant que l'action n'est pas confirmée */
+.wg-btn-danger {
+  background: var(--wg-danger);
+  color: #ffffff;
+  font-weight: 600;
+}
+.wg-btn-danger:hover:not(:disabled) {
+  background: var(--wg-danger-hover);
+}
+.wg-btn-danger-quiet {
+  background: transparent;
+  color: var(--wg-muted);
+}
+.wg-btn-danger-quiet:hover:not(:disabled) {
+  background: var(--wg-danger-soft);
+  color: var(--wg-danger-text);
+}
+
+.wg-btn-sm {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.wg-btn-icon {
+  width: 38px;
+  padding: 0;
+}
+.wg-btn-icon.wg-btn-sm {
+  width: 32px;
+}
+
+/* --- Champs de saisie --- */
+.wg-input {
+  width: 100%;
+  background: var(--wg-surface);
+  border: 1px solid var(--wg-line-strong);
+  border-radius: var(--wg-radius-control);
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--wg-ink);
+  font-family: inherit;
+}
+.wg-input::placeholder {
+  color: var(--wg-faint);
+}
+.wg-input:focus {
+  outline: none;
+  border-color: var(--wg-accent);
+  box-shadow: 0 0 0 3px var(--wg-accent-soft);
+}
+.wg-input:disabled {
+  background: var(--wg-raised);
+  color: var(--wg-muted);
+  cursor: not-allowed;
+}
+textarea.wg-input {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+/* Libellé de champ : gris-bleu, jamais en majuscules criardes */
+.wg-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wg-muted);
+  margin-bottom: 6px;
+}
+
+/* --- Étiquette / puce d'information --- */
+.wg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--wg-radius-chip);
+  background: var(--wg-raised);
+  color: var(--wg-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.wg-chip-accent {
+  background: var(--wg-accent-soft);
+  color: var(--wg-accent-text);
+}
+.wg-chip-warn {
+  background: var(--wg-warn-soft);
+  color: var(--wg-warn-text);
+}
+.wg-chip-danger {
+  background: var(--wg-danger-soft);
+  color: var(--wg-danger-text);
+}
+
+/* --- Bandeaux de message --- */
+.wg-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--wg-radius-control);
+  border: 1px solid;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.wg-note-danger {
+  background: var(--wg-danger-soft);
+  border-color: var(--wg-danger);
+  color: var(--wg-danger-text);
+}
+.wg-note-warn {
+  background: var(--wg-warn-soft);
+  border-color: var(--wg-warn);
+  color: var(--wg-warn-text);
+}
+.wg-note-accent {
+  background: var(--wg-accent-soft);
+  border-color: var(--wg-accent);
+  color: var(--wg-accent-text);
+}
+
+/* --- Modale --- */
+.wg-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 21, 30, 0.55);
+}
+.wg-modal {
+  width: 100%;
+  background: var(--wg-surface);
+  border: 1px solid var(--wg-line);
+  border-radius: var(--wg-radius-modal);
+  box-shadow: var(--wg-shadow-pop);
+}
+.wg-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--wg-line);
+}
+.wg-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--wg-ink);
+}
+.wg-modal-body {
+  padding: 20px;
+}
+.wg-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--wg-line);
+}
+
+/* --- Barres flottantes posées sur une image médicale ---
+   Toujours sombres, quel que soit le thème : elles sont au-dessus du noir. */
+.wg-overlay-bar {
+  background: var(--wg-overlay);
+  border: 1px solid var(--wg-overlay-line);
+  border-radius: var(--wg-radius-card);
+  color: var(--wg-overlay-ink);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.wg-overlay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wg-overlay-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wg-overlay-btn:hover:not(:disabled) {
+  background: var(--wg-overlay-hover);
+  color: var(--wg-overlay-ink);
+}
+.wg-overlay-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.wg-overlay-btn[data-active="true"] {
+  background: var(--wg-accent);
+  color: #ffffff;
+}
+.wg-overlay-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 2px;
+  background: var(--wg-overlay-line);
+}
+
+/* Bouton autonome flottant sur l'image : porte son propre fond sombre. */
+.wg-overlay-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--wg-overlay-line);
+  border-radius: 10px;
+  background: var(--wg-overlay);
+  color: var(--wg-overlay-ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.wg-overlay-action:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.wg-overlay-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.wg-overlay-action[data-active="true"] {
+  background: var(--wg-accent);
+  border-color: var(--wg-accent);
+  color: #ffffff;
+}
+
+/* --- Titres de section --- */
+/* Echelle typographique : quatre tailles, pas une de plus.
+   22 / 15 / 14 / 13 - un rapport serre, qui hierarchise sans theatraliser.
+   Un dossier medical se lit, il ne se contemple pas. */
+.wg-h1 {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--wg-ink);
+  letter-spacing: -0.015em;
+}
+.wg-h2 {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--wg-ink);
+}
+.wg-sub {
+  font-size: 13px;
+  color: var(--wg-muted);
+}
+
+/* Identifiant (dossier, extraction).
+   Seul emploi d'une chasse fixe dans le projet, et il est justifie : un
+   identifiant se compare caractere a caractere entre deux dossiers. Partout
+   ailleurs, `tabular-nums` suffit a aligner les chiffres. */
+.wg-id {
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Variante verte du logo : c'est la seule qui reste lisible aussi bien
+         sur une barre d'onglets claire que sombre. -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- La couleur de fond est posee avant le premier rendu de React : sans
+         cela, un fond blanc apparait brievement avant que le theme sombre ne
+         s'applique. -->
+    <meta name="color-scheme" content="light dark" />
+    <title>Chiron. Plateforme collaborative</title>
+    <script>
+      // Le theme est applique AVANT le chargement de l'application pour eviter
+      // le flash de theme clair. ThemeProvider reprend ensuite la main et
+      // reste la source de verite ; ce script ne fait que devancer son effet.
+      try {
+        var stored = localStorage.getItem("chiron_theme");
+        var theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "wigo:workflow:prelevement",
+  "title": "Étape 1 - Prélèvement (Chiron)",
+  "type": "object",
+  "properties": {
+    "prelevementType": {
+      "type": "string",
+      "title": "Type de prélèvement",
+      "enum": [
+        "fine",
+        "biopsie",
+        "exerese"
+      ],
+      "x-control": "select",
+      "x-enumLabels": [
+        {
+          "value": "fine",
+          "label": "fine"
+        },
+        {
+          "value": "biopsie",
+          "label": "biopsie"
+        },
+        {
+          "value": "exerese",
+          "label": "exerese"
+        }
+      ]
+    },
+    "prelevementDate": {
+      "type": "string",
+      "format": "date",
+      "title": "Date de prélèvement",
+      "x-control": "date"
+    },
+    "blockNumber": {
+      "type": "string",
+      "title": "Numéro de bloc",
+      "x-control": "text"
+    },
+    "fixation": {
+      "type": "string",
+      "title": "Type de fixation",
+      "enum": [
+        "formol",
+        "bouin",
+        "etat_frais"
+      ],
+      "x-control": "select",
+      "x-enumLabels": [
+        {
+          "value": "formol",
+          "label": "formol"
+        },
+        {
+          "value": "bouin",
+          "label": "bouin"
+        },
+        {
+          "value": "etat_frais",
+          "label": "etat_frais"
+        }
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "x-order": [
+    "prelevementType",
+    "prelevementDate",
+    "blockNumber",
+    "fixation"
+  ],
+  "x-source": {
+    "provider": "olga",
+    "formId": "a44b3f32-1e4c-4686-9705-6ca67a381c88",
+    "formVersion": "1.0.0",
+    "lastUpdated": "2024-12-30"
+  }
+}

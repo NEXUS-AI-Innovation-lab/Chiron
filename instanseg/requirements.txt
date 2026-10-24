@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-multipart
+# torch is installed from the CPU-only index in the Dockerfile (see pip --index-url)
+torch
+Pillow
+numpy<2.0.0
+instanseg-torch @ git+https://github.com/instanseg/instanseg.git

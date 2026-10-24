@@ -1,0 +1,15 @@
+# Dépendances : réinstallées dans l'image par `npm install`,
+# et masquées au runtime par le volume anonyme /app/node_modules.
+node_modules
+dist
+build
+.vite
+
+# Fichiers locaux / OneDrive
+*.bak
+.DS_Store
+Thumbs.db
+.git
+.env
+.env.*
+npm-debug.log*

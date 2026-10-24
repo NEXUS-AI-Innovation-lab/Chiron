@@ -1,0 +1,12 @@
+# Données volumineuses montées en volume au runtime : les copier dans l'image
+# ajoutait plus d'un Go à chaque build sans aucun bénéfice.
+dzi_data/
+images_initiales/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.svs
+*.tif
+*.tiff
+*.dcm
+*.DCM

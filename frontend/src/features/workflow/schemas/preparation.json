@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "wigo:workflow:preparation",
+  "title": "Étape 2 - Préparation (Chiron)",
+  "type": "object",
+  "properties": {
+    "slideCount": {
+      "type": "integer",
+      "title": "Nombre de lames",
+      "x-control": "number"
+    },
+    "staining": {
+      "type": "string",
+      "title": "Coloration",
+      "enum": [
+        "HE",
+        "HES",
+        "IHC"
+      ],
+      "x-control": "select",
+      "x-enumLabels": [
+        {
+          "value": "HE",
+          "label": "Hématoxyline-Éosine"
+        },
+        {
+          "value": "HES",
+          "label": "Hématoxyline-Éosine-Safran"
+        },
+        {
+          "value": "IHC",
+          "label": "Immunohistochimie"
+        }
+      ]
+    },
+    "macroObs": {
+      "type": "string",
+      "title": "Observations macroscopiques",
+      "x-control": "textarea"
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "x-order": [
+    "slideCount",
+    "staining",
+    "macroObs"
+  ],
+  "x-source": {
+    "provider": "olga",
+    "formId": "a42b3f12-1e4c-7636-9705-6ca87a381c93",
+    "formVersion": "1.0.0",
+    "lastUpdated": "2024-12-30"
+  }
+}

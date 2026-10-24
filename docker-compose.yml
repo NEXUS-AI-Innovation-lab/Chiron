@@ -1,0 +1,130 @@
+services:
+  # --- Database ---
+  postgres:
+    image: postgres:15
+    container_name: p6_postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: p6_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  # --- Object Storage Imagerie (MinIO) ---
+  minio:
+      image: quay.io/minio/minio:latest
+      container_name: p6_minio
+      hostname: minio
+      ports:
+        - "9000:9000"
+        - "9001:9001"
+      environment:
+        MINIO_ROOT_USER: minioadmin
+        MINIO_ROOT_PASSWORD: minioadmin
+      volumes:
+        - minio_data:/data
+      command: server /data --console-address ":9001"
+      networks:
+        app_network:
+          aliases:
+            - minio
+
+  # --- PACS Radiologie (Orthanc) ---
+  orthanc:
+    image: jodogne/orthanc-plugins:1.12.0
+    container_name: p6_orthanc
+    ports:
+      - "8042:8042"
+      - "4242:4242"
+    environment:
+      - ORTHANC_NAME=Chiron PACS Radiologie
+    volumes:
+      - orthanc_data:/var/lib/orthanc/db
+    networks:
+      - app_network
+
+  # --- Backend (Python/FastAPI) ---
+  backend:
+    build: ./backend
+    container_name: p6_backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8002
+    volumes:
+      - ./backend:/app
+      - ./backend/dzi_data:/app/dzi_data 
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://user:password@p6_postgres:5432/p6_db
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET_NAME=biopsie
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - app_network
+
+  # --- InstanSeg (Instance Segmentation API) ---
+  instanseg:
+    build: ./instanseg
+    container_name: p6_instanseg
+    ports:
+      # 7000 cote hote est pris par le recepteur AirPlay de macOS (ControlCenter).
+      # Le port interne reste 7000 : le backend joint le service via http://instanseg:7000.
+      - "7001:7000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # --- Frontend (React/Vite) ---
+  frontend:
+    build: ./frontend
+    container_name: p6_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8002
+      # Service externe OLGA (formulaires du workflow). Résolu par le
+      # NAVIGATEUR, pas par le conteneur : d'où localhost et non un nom de
+      # service Docker. OLGA vit dans sa propre stack (olga-designer-admin-backend).
+      - VITE_OLGA_API_URL=http://localhost:9091
+    networks:
+      - app_network
+
+  # --- Auto-Injection des Images ---
+  image_seeder:
+    build: ./backend
+    container_name: p6_image_seeder
+    command: python seed_images.py
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - orthanc
+      - minio
+    networks:
+      - app_network
+
+volumes:
+  postgres_data:
+  minio_data:
+  orthanc_data:
+
+networks:
+  app_network:
+    driver: bridge

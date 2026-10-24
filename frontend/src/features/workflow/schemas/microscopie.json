@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "wigo:workflow:microscopie",
+  "title": "Étape 3 - Microscopie (Chiron)",
+  "type": "object",
+  "properties": {
+    "microObs": {
+      "type": "string",
+      "title": "Observations microscopiques",
+      "x-control": "textarea"
+    },
+    "histoType": {
+      "type": "string",
+      "title": "Type histologique",
+      "enum": [
+        "canalaire",
+        "lobulaire",
+        "mucineux",
+        "autre"
+      ],
+      "x-control": "select",
+      "x-enumLabels": [
+        {
+          "value": "canalaire",
+          "label": "Carcinome canalaire"
+        },
+        {
+          "value": "lobulaire",
+          "label": "Carcinome lobulaire"
+        },
+        {
+          "value": "mucineux",
+          "label": "Carcinome mucineux"
+        },
+        {
+          "value": "autre",
+          "label": "Autre type"
+        }
+      ]
+    },
+    "sbrGrade": {
+      "type": "string",
+      "title": "Grade SBR",
+      "enum": [
+        "1",
+        "2",
+        "3"
+      ],
+      "x-control": "select",
+      "x-enumLabels": [
+        {
+          "value": "1",
+          "label": "Grade I"
+        },
+        {
+          "value": "2",
+          "label": "Grade II"
+        },
+        {
+          "value": "3",
+          "label": "Grade III"
+        }
+      ]
+    },
+    "margins": {
+      "type": "string",
+      "title": "Marges",
+      "x-control": "text"
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "x-order": [
+    "microObs",
+    "histoType",
+    "sbrGrade",
+    "margins"
+  ],
+  "x-source": {
+    "provider": "olga",
+    "formId": "a13b3f32-1e4c-0000-2189-6ca67a381c03",
+    "formVersion": "1.0.0",
+    "lastUpdated": "2024-12-30"
+  }
+}
