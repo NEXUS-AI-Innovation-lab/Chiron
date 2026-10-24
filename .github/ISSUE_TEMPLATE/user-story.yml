@@ -1,0 +1,51 @@
+name: User story
+description: Un besoin utilisateur, avec ses critères d'acceptation
+title: "[US] "
+labels: ["user story"]
+body:
+  - type: input
+    id: role
+    attributes:
+      label: En tant que
+      placeholder: anatomopathologiste, radiologue, administrateur…
+    validations:
+      required: true
+  - type: textarea
+    id: besoin
+    attributes:
+      label: Je veux
+      placeholder: ce que l'utilisateur doit pouvoir faire
+    validations:
+      required: true
+  - type: textarea
+    id: benefice
+    attributes:
+      label: Afin de
+      placeholder: le bénéfice attendu
+    validations:
+      required: true
+  - type: textarea
+    id: criteres
+    attributes:
+      label: Critères d'acceptation
+      description: En Gherkin (Étant donné / Quand / Alors) ou en cases à cocher.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: commun
+    attributes:
+      label: Besoin commun associé (facultatif)
+      placeholder: titre de la carte « Commun » dans le projet
+  - type: checkboxes
+    id: dor
+    attributes:
+      label: Definition of Ready (à cocher avant d'entrer en sprint)
+      options:
+        - label: Critères d'acceptation écrits et vérifiables
+        - label: Groupe, Nature, Epic et Priorite renseignés dans le projet
+        - label: Estimée à 5 points au plus
+        - label: Dépendances identifiées (autre groupe, API, données)
+        - label: Planche Figma liée si la story touche l'interface
