@@ -16,7 +16,8 @@ services:
 
   # --- Object Storage Imagerie (MinIO) ---
   minio:
-      image: quay.io/minio/minio:latest
+      # MinIO ne publie plus d'images Docker depuis fin 2025 : fork communautaire compatible
+      image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
       container_name: p6_minio
       hostname: minio
       ports:
