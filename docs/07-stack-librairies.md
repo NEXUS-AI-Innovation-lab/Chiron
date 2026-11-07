@@ -679,7 +679,7 @@ export default { plugins: { '@tailwindcss/postcss': {}, autoprefixer: {} } }
 | | |
 |---|---|
 | **À quoi ça sert** | Framework web ASGI : routage, validation via Pydantic, documentation OpenAPI automatique. |
-| **Où** | [`main.py`](../backend/main.py), [`workflow/router.py`](../backend/workflow/router.py) |
+| **Où** | [`routers/`](../backend/routers/), [`workflow/router.py`](../backend/workflow/router.py) |
 
 ```python
 # Route avec injection de session
@@ -776,7 +776,7 @@ connection.execute(text("SELECT 1"))
 | | |
 |---|---|
 | **À quoi ça sert** | Valider les entrées, sérialiser les sorties, générer le schéma OpenAPI. |
-| **Où** | Schémas de [`main.py`](../backend/main.py#L90-L132), [`workflow/schemas.py`](../backend/workflow/schemas.py), [`instanseg_client.py`](../backend/instanseg_client.py) |
+| **Où** | [`schemas/`](../backend/schemas/), [`workflow/schemas.py`](../backend/workflow/schemas.py), [`clients/instanseg.py`](../backend/clients/instanseg.py) |
 
 ```python
 class PatientCreate(BaseModel):
@@ -814,7 +814,7 @@ class StepSavePayload(BaseModel):
 | | |
 |---|---|
 | **À quoi ça sert** | Traiter des images de plusieurs Go **en flux**, sans les charger en mémoire. C'est ce qui rend le tuilage possible. |
-| **Où** | [`main.py`](../backend/main.py) (upload, `/analyze-ai`, `/extract-roi`), [`seed_images.py`](../backend/seed_images.py) |
+| **Où** | [`services/slide_processing.py`](../backend/services/slide_processing.py) (upload, `/analyze-ai`, `/extract-roi`), [`seed_images.py`](../backend/seed_images.py) |
 | **Dépendance système** | `libvips-dev`, installée dans le `Dockerfile` |
 
 ```python
@@ -866,7 +866,7 @@ Documentation : https://libvips.github.io/pyvips/
 | | |
 |---|---|
 | **À quoi ça sert** | Client S3 pour le stockage objet. |
-| **Où** | [`main.py`](../backend/main.py#L80-L82), [`storage.py`](../backend/storage.py), [`seed_images.py`](../backend/seed_images.py) |
+| **Où** | [`clients/object_storage.py`](../backend/clients/object_storage.py), [`storage.py`](../backend/storage.py), [`seed_images.py`](../backend/seed_images.py) |
 
 ```python
 from minio import Minio
@@ -901,7 +901,7 @@ Le backend utilise **les deux**, délibérément :
 |---|---|---|
 | Style | **asynchrone** (`AsyncClient`) | synchrone |
 | Utilisé pour | **InstanSeg** | **Orthanc** |
-| Où | [`instanseg_client.py`](../backend/instanseg_client.py) | [`main.py`](../backend/main.py), [`seed_images.py`](../backend/seed_images.py) |
+| Où | [`clients/instanseg.py`](../backend/clients/instanseg.py) | [`clients/orthanc.py`](../backend/clients/orthanc.py), [`seed_images.py`](../backend/seed_images.py) |
 | Encapsulation | `await client.post(...)` directement | `await run_in_threadpool(lambda: requests.post(...))` |
 
 ```python
@@ -909,7 +909,7 @@ Le backend utilise **les deux**, délibérément :
 self.client = httpx.AsyncClient(base_url="http://instanseg:7000", timeout=300.0)
 response = await self.client.post("/segment", files=files, params=params)
 response.raise_for_status()
-await self.client.aclose()          # ⚠️ à fermer (@app.on_event("shutdown"))
+await self.client.aclose()          # fermé à l'arrêt par le lifespan de main.py
 
 # requests — synchrone, donc déporté dans un thread
 orthanc_response = await run_in_threadpool(
@@ -942,7 +942,7 @@ docker exec p6_backend sh -c 'cd /app && alembic history'
 | | |
 |---|---|
 | **À quoi ça sert** | Statistiques sur les instances renvoyées par InstanSeg. |
-| **Où** | [`main.py:617-629`](../backend/main.py#L617-L629) uniquement (côté backend) |
+| **Où** | [`services/analysis.py`](../backend/services/analysis.py) uniquement (côté backend) |
 
 ```python
 cell_areas = [inst.area_px for inst in instances]
@@ -1025,9 +1025,9 @@ et `0` est le fond.
 | Ajouter un graphique | `pages/Dashboard.tsx` — Recharts |
 | Générer un PDF | `RadiologyViewer.handleExportPDF` — jsPDF |
 | Capturer l'écran | `Viewer.handleDownloadSnapshot` — dom-to-image |
-| Traiter une grande image | `backend/main.py` — PyVips |
-| Lire/écrire dans MinIO | `backend/storage.py` + client dans `main.py` |
-| Appeler InstanSeg | `backend/instanseg_client.py` — httpx |
-| Appeler Orthanc | `backend/main.py` — requests |
+| Traiter une grande image | `backend/services/slide_processing.py` — PyVips |
+| Lire/écrire dans MinIO | `backend/storage.py` + client dans `backend/clients/object_storage.py` |
+| Appeler InstanSeg | `backend/clients/instanseg.py` — httpx |
+| Appeler Orthanc | `backend/clients/orthanc.py` — requests |
 | Modifier le schéma | `backend/models.py` + Alembic |
 | Changer les étapes | `backend/workflow/constants.py` **et** `frontend/.../steps.ts` |

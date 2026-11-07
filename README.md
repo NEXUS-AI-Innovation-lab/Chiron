@@ -532,13 +532,18 @@ l'erreur exacte si l'une d'elles est indisponible.
 
 ```
 backend/
-├── main.py                 API historique (patients, images, IA, extractions)
+├── main.py                 Assemble l'app : lifespan, CORS, erreurs, routeurs
+├── config.py               Configuration (variables d'environnement)
+├── migrations.py           Migrations Alembic au démarrage
+├── routers/                Routes HTTP par domaine (patients, biopsies, radiology...)
+├── services/               Logique métier par domaine
+├── schemas/                Contrats Pydantic
+├── clients/                Clients MinIO, Orthanc, InstanSeg
 ├── models.py               Modèles SQLAlchemy
 ├── database.py             Connexion, session
 ├── storage.py              Résolution des lames dans MinIO (partagé)
-├── instanseg_client.py     Client HTTP du service d'IA
 ├── seed_images.py          Régénération des tuiles + injection initiale
-├── workflow/               Moteur d'étapes — structure cible
+├── workflow/               Moteur d'étapes (même découpage en couches)
 │   ├── router.py           Routes HTTP
 │   ├── service.py          Machine à états, règles de transition
 │   ├── schemas.py          Contrats Pydantic

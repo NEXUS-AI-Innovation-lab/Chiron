@@ -6,6 +6,8 @@ import httpx
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
+import config
+
 class Instance(BaseModel):
     id: int
     area_px: int
@@ -88,3 +90,10 @@ class InstanSegClient:
     async def close(self):
         """Ferme la connexion de manière appropriée"""
         await self.client.aclose()
+
+
+# Client partagé par toute l'application, fermé à l'arrêt par le `lifespan`
+# de main.py.
+print("🤖 Initialisation du client InstanSeg...")
+instanseg_client = InstanSegClient(base_url=config.INSTANSEG_URL)
+print("✅ Client InstanSeg prêt !")

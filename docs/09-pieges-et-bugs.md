@@ -45,7 +45,7 @@ if (biopsy.status === "termine" || biopsy.status === "archive" || biopsy.status 
 Or les deux seuls endroits qui écrivent `Biopsy.status` posent la même valeur :
 
 ```python
-# main.py:232   et   seed_images.py:118
+# services/biopsies.py (import_biopsy)   et   seed_images.py:118
 status="Non analysé"
 ```
 
@@ -108,7 +108,7 @@ body: JSON.stringify({ report, annotations: annotationsStr,
 ```
 
 ```python
-# 2. Le schéma serveur NE LE DÉCLARE PAS  (main.py:420-422)
+# 2. Le schéma serveur NE LE DÉCLARE PAS  (schemas/radiology.py)
 class ReportPayload(BaseModel):
     report: str
     annotations: Optional[str] = ""
@@ -116,7 +116,7 @@ class ReportPayload(BaseModel):
 ```
 
 ```python
-# 3. Il n'y a NI COLONNE pour le stocker, NI CLÉ dans la réponse  (main.py:435)
+# 3. Il n'y a NI COLONNE pour le stocker, NI CLÉ dans la réponse  (services/radiology.py)
 return {"report": radio.report or "", "annotations": radio.annotations or ""}
 ```
 
@@ -136,7 +136,7 @@ last_modified_by = Column(String, nullable=True)
 
 # 2. alembic revision --autogenerate -m "radiology last_modified_by"
 
-# 3. main.py — schéma + lecture + écriture
+# 3. schemas/radiology.py + services/radiology.py — schéma + lecture + écriture
 class ReportPayload(BaseModel):
     report: str
     annotations: Optional[str] = ""
@@ -181,7 +181,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8002";
 ### 🐛 A5. Le champ `url` des extractions pointe vers un fichier inexistant
 
 ```python
-# main.py:858
+# services/extractions.py — list_for_folder()
 "url": f"http://localhost:8002/dzi_data/{e.dzi_url}",
 ```
 
@@ -192,7 +192,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8002";
    le pousse dans MinIO, puis **l'efface** :
 
 ```python
-# main.py:736-741
+# services/extractions.py — create_from_region()
 minio_client.fput_object(bucket_name=BUCKET_NAME, object_name=minio_object_name,
                          file_path=output_path)
 if os.path.exists(output_path):
@@ -257,7 +257,7 @@ Dashboard, ou remonter le chargement des extractions au niveau du Dashboard.
 ### 🐛 A8. `POST /extract-roi` avale les erreurs de découpage
 
 ```python
-# main.py:718-748
+# services/extractions.py — create_from_region()
 if source_path.exists():
     try:
         image = pyvips.Image.new_from_file(...)
@@ -296,7 +296,7 @@ except Exception as error:
 ### 🐛 A9. `DELETE /extractions/{id}` nettoie le mauvais chemin
 
 ```python
-# main.py:928-940
+# services/extractions.py — delete_extraction()
 try:
     minio_client.remove_object(BUCKET_NAME, ext.dzi_url)
 except Exception:
@@ -466,7 +466,7 @@ Toute modification de la géométrie doit tenir compte de cette surcharge.
 ### ⚠️ B5. `POST /annotations/save` écrase avec des valeurs vides
 
 ```python
-# main.py:807-823 — tous les champs, sans condition
+# services/extractions.py — save_annotations() : tous les champs, sans condition
 ext.prelevement_type = data.prelevement_type   # "" par défaut Pydantic
 ext.histo_type       = data.histo_type
 ext.sbr_grade        = data.sbr_grade
@@ -589,57 +589,47 @@ lancer `db.query(models.Biopsy).all()` avant l'existence des tables →
 
 ---
 
-### ⚠️ B12. Variables d'environnement déclarées mais jamais lues
+### ⚠️ B12. Variables d'environnement déclarées mais jamais lues — *résolu côté API, reste le seeder*
+
+> **Mise à jour (découpage du backend) :** l'API lit maintenant toute sa
+> configuration dans [`config.py`](../backend/config.py) (voir
+> [14 — Architecture backend §6](14-architecture-backend.md#6-la-configuration--configpy)).
+> Les variables `MINIO_*` du compose sont donc lues par l'API. **Reste à faire :**
+> aligner `seed_images.py`, qui lit `MINIO_HOST` au lieu de `MINIO_ENDPOINT`.
 
 | Variable | Déclarée | Lue par |
 |---|---|---|
 | `DATABASE_URL` | compose | ✅ `database.py:17` |
 | `VITE_API_URL` | compose | ✅ (sauf `RadiologyViewer` — [A4](#-a4-radiologyviewer-ignore-vite_api_url)) |
 | `VITE_OLGA_API_URL` | compose | ✅ `olgaClient.ts:14` |
-| **`MINIO_ENDPOINT`** | compose | ❌ **personne** |
-| **`MINIO_BUCKET_NAME`** | compose | ❌ **personne** |
-| `MINIO_ACCESS_KEY` | compose | ⚠️ seeder uniquement |
-| `MINIO_SECRET_KEY` | compose | ⚠️ seeder uniquement |
+| `MINIO_ENDPOINT` | compose | ✅ API (`config.py`) — ❌ pas le seeder |
+| `MINIO_BUCKET_NAME` | compose | ✅ API (`config.py`) — ❌ pas le seeder |
+| `MINIO_ACCESS_KEY` | compose | ✅ API (`config.py`) + seeder |
+| `MINIO_SECRET_KEY` | compose | ✅ API (`config.py`) + seeder |
 | `MINIO_HOST` | ❌ **absente** du compose | seeder (repli `minio:9000`) |
-| `SEED_BASE_DIR`, `DZI_FOLDER`, `ORTHANC_URL/USER/PASSWORD` | absentes | seeder (replis) |
+| `SEED_BASE_DIR` | absente | seeder (repli) |
+| `DZI_FOLDER`, `ORTHANC_URL/USER/PASSWORD` | absentes | API (`config.py`) + seeder (replis) |
+| `PUBLIC_API_URL`, `INSTANSEG_URL` | absentes | API (`config.py`, replis) |
 | `ALEMBIC_URL` | absente | `alembic/env.py:35` |
 
-`main.py` **ignore complètement** l'environnement MinIO :
+**Avant le découpage**, l'ancien `main.py` codait les valeurs MinIO en dur
+(`MINIO_HOST = "minio:9000"`, `ACCESS_KEY = "minioadmin"`...). Changer le mot de
+passe dans le compose ne changeait rien au backend. C'était une violation de la
+convention n° 1 (« Configuration par l'environnement »).
 
-```python
-# main.py:75-78
-MINIO_HOST  = "minio:9000"
-ACCESS_KEY  = "minioadmin"
-SECRET_KEY  = "minioadmin"
-BUCKET_NAME = "biopsie"
-```
-
-**C'est une violation de la convention n° 1** (« Configuration par
-l'environnement »). Changer le mot de passe MinIO dans le compose **ne changerait
-rien** au backend — et casserait le seeder.
-
-**Correctif**
-
-```python
-MINIO_HOST  = os.getenv("MINIO_ENDPOINT", "minio:9000")
-ACCESS_KEY  = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-SECRET_KEY  = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME", "biopsie")
-```
-
-Et aligner le seeder sur `MINIO_ENDPOINT`.
+**Correctif restant :** aligner le seeder sur `MINIO_ENDPOINT`, idéalement en
+lui faisant importer `config.py`.
 
 ---
 
 ## C — Dettes techniques assumées
 
-### 🏗️ C1. `main.py` fait 1 150 lignes
+### 🏗️ C1. `main.py` faisait 1 150 lignes — *résolu*
 
-Routes, schémas, helpers et logique métier dans un seul fichier. **Le projet en
-est conscient** et a créé `workflow/` comme structure cible.
-
-> *« Le nouveau code va dans les modules dédiés, pas dans les fichiers
-> historiques. »*
+Routes, schémas, helpers et logique métier étaient dans un seul fichier.
+**Résolu :** `main.py` ne fait plus que 70 lignes et le code est réparti en
+`routers/`, `services/`, `schemas/` et `clients/`, sur le modèle de `workflow/`.
+Voir [14 — Architecture backend](14-architecture-backend.md).
 
 ### 🏗️ C2. `Viewer.tsx` fait 1 732 lignes
 
@@ -697,15 +687,17 @@ désérialisé, validé par Pydantic… puis **jeté**. Le backend ne lit que
 
 **Correctif :** un paramètre `include_labeled_array: bool = False`.
 
-### 🏗️ C7. `@app.on_event("shutdown")` est déprécié
+### 🏗️ C7. `@app.on_event("shutdown")` est déprécié — *résolu*
 
-FastAPI moderne utilise le `lifespan` :
+**Résolu :** [`main.py`](../backend/main.py) utilise désormais le `lifespan`,
+qui applique aussi les migrations au démarrage :
 
 ```python
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    apply_migrations_safely()
     yield
     await instanseg_client.close()
 
@@ -777,7 +769,7 @@ implémenté.
 ### 🔒 S4. Le seul contrôle d'autorisation est déclaratif
 
 ```python
-# main.py:926-927
+# services/extractions.py — delete_extraction()
 if ext.owner != username:
     raise HTTPException(status_code=403)
 ```
@@ -810,8 +802,8 @@ Même configuration côté InstanSeg (`allow_credentials=False`, donc valide).
 | Service | Identifiants | Où |
 |---|---|---|
 | PostgreSQL | `user` / `password` | compose + `database.py` |
-| MinIO | `minioadmin` / `minioadmin` | compose + `main.py` (en dur) |
-| Orthanc | `orthanc` / `orthanc` | **en dur** dans `main.py` |
+| MinIO | `minioadmin` / `minioadmin` | compose + défauts de `config.py` |
+| Orthanc | `orthanc` / `orthanc` | défauts de `config.py` |
 
 ### 🔒 S8. Aucun chiffrement
 
@@ -897,4 +889,4 @@ docker exec p6_frontend npm run build     # inclut le type-check
 3. **Vérifier les deux côtés** : une transition refusée peut venir du serveur
    *ou* d'une désynchronisation `steps.ts` / `constants.py`.
 4. **`npm run build`** avant de livrer — `dev` ne vérifie pas les types.
-5. **Ne pas étendre `main.py` ni `Viewer.tsx`** : créer un module dédié.
+5. **Ne pas recréer de fichier fourre-tout** côté backend : respecter les couches de [14 — Architecture backend](14-architecture-backend.md). Ne pas étendre `Viewer.tsx` : créer un module dédié.

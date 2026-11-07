@@ -9,14 +9,20 @@ Alembic 1.16.5 · PyVips 3.1.1 · MinIO 7.2.20 · httpx 0.28.1 · NumPy 2.0.2
 
 ```
 backend/
-├── main.py                 1 150 l.  API historique — TOUT sauf le workflow
+├── main.py                    70 l.  Assemble l'app (lifespan, CORS, erreurs, routeurs)
+├── config.py                  34 l.  Configuration lue depuis l'environnement
+├── migrations.py              32 l.  Alembic « upgrade head » au démarrage
 ├── models.py                 176 l.  Modèles SQLAlchemy (7 tables)
 ├── database.py                38 l.  Engine, SessionLocal, Base, get_db
 ├── storage.py                 78 l.  Résolution des lames dans MinIO (PARTAGÉ)
-├── instanseg_client.py        90 l.  Client HTTP du micro-service IA
 ├── seed_images.py            324 l.  Réconciliation des tuiles + injection
 │
-├── workflow/                          ← STRUCTURE CIBLE
+├── routers/                           Routes HTTP, une par domaine (voir doc 14)
+├── services/                          Logique métier (voir doc 14)
+├── schemas/                           Contrats Pydantic (voir doc 14)
+├── clients/                           MinIO, Orthanc, InstanSeg (voir doc 14)
+│
+├── workflow/                          Moteur de workflow, même découpage
 │   ├── __init__.py             1 l.
 │   ├── router.py              97 l.  Routes HTTP, zéro règle métier
 │   ├── service.py            255 l.  Machine à états — TOUTE la logique
@@ -38,10 +44,13 @@ backend/
 
 ### La règle d'or
 
-> **`main.py` est du code historique. Le nouveau code va dans un package
-> dédié, sur le modèle de `workflow/`.**
+> **Chaque morceau de code va dans sa couche : `routers/` (HTTP), `services/`
+> (métier), `schemas/` (contrats), `clients/` (services externes).** Le détail
+> complet, l'index des routes et la correspondance avec l'ancien `main.py` sont
+> dans [14 — Architecture backend](14-architecture-backend.md).
 
-`workflow/` montre la structure cible :
+L'ancien `main.py` de 1 150 lignes a été découpé selon ce modèle, déjà appliqué
+par `workflow/` :
 
 | Couche | Fichier | Responsabilité | Ne fait PAS |
 |---|---|---|---|
@@ -101,31 +110,26 @@ ouvre une session par requête et la ferme quoi qu'il arrive.
 
 ---
 
-## 3. `main.py` — anatomie du fichier historique
+## 3. `main.py` — l'assemblage de l'application
 
-### Ordre de lecture
+`main.py` ne contient plus aucune route. Il fait cinq choses, dans cet ordre :
 
-| Lignes | Contenu |
+| Étape | Contenu |
 |---|---|
-| 1-27 | Imports |
-| 29-51 | `apply_migrations()` + exécution immédiate |
-| 53-72 | App FastAPI, CORS, montage `/dzi_data`, inclusion du routeur workflow |
-| 74-87 | Clients MinIO et InstanSeg |
-| 90-141 | Schémas Pydantic patients + helpers |
-| 144-371 | Routes de création et d'import |
-| 374-452 | Schémas d'annotation + routes de compte rendu radiologique |
-| 455-496 | Arrêt propre + `/health` |
-| 499-543 | `download_biopsy_source()` |
-| 546-677 | `POST /analyze-ai` |
-| 680-943 | Extractions, annotations, détails |
-| 945-1151 | Suppressions (patient, biopsie, étude) + helpers de nettoyage |
+| `lifespan` | Migrations Alembic au démarrage, fermeture du client InstanSeg à l'arrêt |
+| `app.add_middleware` | CORS |
+| `@app.exception_handler(ServiceError)` | Transforme les erreurs métier en `{"detail": ...}` |
+| `app.mount("/dzi_data")` | Sert les tuiles DZI |
+| `app.include_router` × 7 | `health`, `patients`, `biopsies`, `radiology`, `analysis`, `extractions`, `workflow` |
+
+Pour trouver le code d'une route, utilisez l'index de
+[14 — Architecture backend §8](14-architecture-backend.md#8-index-des-routes--quelle-url-quel-fichier).
 
 ### Le montage statique des tuiles
 
 ```python
-DZI_FOLDER = "/app/dzi_data"
-os.makedirs(DZI_FOLDER, exist_ok=True)
-app.mount("/dzi_data", StaticFiles(directory=DZI_FOLDER), name="dzi_data")
+os.makedirs(config.DZI_FOLDER, exist_ok=True)   # /app/dzi_data par défaut
+app.mount("/dzi_data", StaticFiles(directory=config.DZI_FOLDER), name="dzi_data")
 ```
 
 C'est ce qui rend `http://localhost:8002/dzi_data/William-abc/CMU-1.dzi`
@@ -157,21 +161,18 @@ toute la durée de l'opération — plusieurs minutes pour une lame de 500 Mo.
 un thread séparé.
 
 ```python
-# Envoi vers MinIO — main.py:209
+# Envoi vers MinIO — services/biopsies.py
 await run_in_threadpool(
     minio_client.fput_object, BUCKET_NAME, minio_object_name, str(source_path)
 )
 
-# Tuilage PyVips — main.py:218
+# Tuilage PyVips — services/biopsies.py → services/slide_processing.py
 await run_in_threadpool(
-    lambda: pyvips.Image.new_from_file(str(source_path), access="sequential")
-        .dzsave(str(patient_dir / stem), tile_size=256, overlap=1, suffix=".jpg")
+    slide_processing.tile_to_dzi, source_path, patient_dir / stem
 )
 
-# Appel HTTP vers Orthanc — main.py:270
-orthanc_response = await run_in_threadpool(
-    lambda: requests.post("http://orthanc:8042/instances", data=file.file, ...)
-)
+# Appel HTTP vers Orthanc — services/radiology.py → clients/orthanc.py
+orthanc_response = await run_in_threadpool(orthanc.upload_instance, file.file)
 ```
 
 > **Règle à appliquer systématiquement :** dans une route `async def`, tout appel
@@ -187,7 +188,7 @@ orthanc_response = await run_in_threadpool(
 ### Pattern 2 — lecture en flux, jamais tout en RAM
 
 ```python
-# Réception d'un upload par blocs de 8 Mo — main.py:200-203
+# Réception d'un upload par blocs de 8 Mo — services/biopsies.py
 with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as temporary:
     source_path = Path(temporary.name)
     while chunk := await file.read(8 * 1024 * 1024):
@@ -201,12 +202,12 @@ chargement complet de l'image.
 > `dzi_data`.** Ce dernier est monté en statique : la lame brute y serait
 > téléchargeable pendant l'import, et un import interrompu y laisserait
 > plusieurs centaines de Mo. Commentaire explicite
-> [main.py:196-199](../backend/main.py#L196-L199).
+> dans [services/biopsies.py](../backend/services/biopsies.py).
 
 ### Pattern 3 — suppression différée des tuiles
 
 ```python
-def _retirer_chemin(cible, rapport, differes):
+def retirer_chemin(cible, rapport, differes):   # services/tile_cleanup.py
     resolu = cible.resolve()
     if not str(resolu).startswith(str(racine)):    # garde-fou anti-traversée
         rapport["warnings"].append(f"Chemin hors dzi_data ignore : {cible}")
@@ -234,7 +235,7 @@ reste sous `dzi_data`. C'est la seule protection de ce type du backend.
 
 ## 5. `storage.py` — la résolution des lames
 
-78 lignes, **partagées entre `main.py` et `seed_images.py`**. Deux fonctions
+78 lignes, **partagées entre les services de l'API et `seed_images.py`**. Deux fonctions
 publiques :
 
 ```python
@@ -250,15 +251,15 @@ le nom ne correspond pas forcément à l'objet MinIO. Et deux dispositions
 coexistent dans le bucket (voir [03 — Docker §2](03-docker.md#2-minio--le-stockage-objet-des-lames)).
 
 `find_object_key` utilise `stat_object` : il vérifie l'existence **sans
-rapatrier** plusieurs centaines de Mo. `download_biopsy_source` dans `main.py`,
+rapatrier** plusieurs centaines de Mo. `download_biopsy_source` dans `services/biopsies.py`,
 lui, télécharge vraiment et lève une `404` explicite listant les emplacements
 essayés :
 
 ```python
-raise HTTPException(status_code=404, detail=(
+raise NotFound(
     "Lame source introuvable dans MinIO pour ce patient. "
     f"Emplacements essayes : {', '.join(candidates[:6])}."
-))
+)
 ```
 
 C'est un bon exemple du principe « les erreurs se voient » : le message dit quoi
@@ -266,7 +267,7 @@ vérifier.
 
 ---
 
-## 6. `instanseg_client.py` — le client du service IA
+## 6. `clients/instanseg.py` — le client du service IA
 
 ```python
 class InstanSegClient:
@@ -280,16 +281,16 @@ class InstanSegClient:
 ```
 
 - **`httpx.AsyncClient`** avec un pool de connexions réutilisé — d'où le
-  `close()` branché sur `@app.on_event("shutdown")`
-  ([main.py:455-462](../backend/main.py#L455-L462)). Sans ça, les connexions du
+  `close()` appelé à l'arrêt par le `lifespan` de
+  [main.py](../backend/main.py). Sans ça, les connexions du
   pool restaient ouvertes jusqu'à la fin du processus.
 - **Timeout de 300 s** : la segmentation CPU d'un patch 1500×1500 peut être
   longue.
 - Les réponses sont validées par des modèles Pydantic (`Instance`,
   `SegmentResult`, `BlobPoints`) — le contrat du service est explicite.
 
-> `@app.on_event("shutdown")` est **déprécié** en FastAPI moderne au profit du
-> `lifespan`. Fonctionnel, mais à moderniser.
+> L'ancien `@app.on_event("shutdown")`, déprécié, a été remplacé par le
+> `lifespan` lors du découpage du backend.
 
 ---
 
@@ -406,7 +407,7 @@ franchir l'étape.
 
 ---
 
-## 8. Les schémas Pydantic de `main.py`
+## 8. Les schémas Pydantic de `schemas/`
 
 ### `AnalysisPayload` — le schéma fourre-tout
 
@@ -429,19 +430,19 @@ Un **seul** schéma sert trois routes : `/analyze-ai`, `/extract-roi`,
 
 ```python
 class BiopsySchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     image_url: Optional[str] = None
     status: str
-    class Config:
-        from_attributes = True
 ```
 
 `from_attributes = True` (l'ex-`orm_mode` de Pydantic v1) autorise la
 construction depuis un objet SQLAlchemy. C'est ce qui permet
 `return patient` avec `response_model=PatientSchema`.
 
-> Syntaxe `class Config` = style Pydantic v1, toléré en v2. Le style moderne est
-> `model_config = ConfigDict(from_attributes=True)`.
+> L'ancien `main.py` utilisait `class Config:` (style Pydantic v1). Le découpage
+> est passé à `model_config = ConfigDict(...)`, le style de Pydantic v2.
 
 ---
 
@@ -457,14 +458,19 @@ construction depuis un objet SQLAlchemy. C'est ce qui permet
    backend/workflow/constants.py        → ajouter dans FIELD_TO_COLUMN[etape]
                                           avec le bon convertisseur
 5. Si elle doit sortir par l'API :
-   backend/main.py get_details()        → ajouter la clé
+   backend/services/extractions.py      → REPORT_FIELDS ou get_details()
 6. docker compose restart backend
 ```
 
 ### Ajouter une route
 
-**Ne l'ajoutez pas dans `main.py`.** Créez un package sur le modèle de
-`workflow/` :
+Dans un domaine existant : un schéma dans `schemas/<domaine>.py` si besoin, une
+fonction dans `services/<domaine>.py`, puis quelques lignes dans
+`routers/<domaine>.py`. La recette complète est dans
+[14 — Architecture backend §10](14-architecture-backend.md#10-recette--ajouter-une-fonctionnalité).
+
+Pour un gros domaine autonome (machine à états, constantes...), créez plutôt
+un package sur le modèle de `workflow/` :
 
 ```
 backend/mondomaine/
@@ -526,7 +532,7 @@ Il faut modifier **deux** fichiers, l'un côté backend, l'autre côté frontend
 **Deux formes de `detail` coexistent** — c'est important pour le frontend :
 
 ```jsonc
-// Routes de main.py — detail est une CHAÎNE
+// Routes de routers/ (ServiceError) — detail est une CHAÎNE
 { "detail": "Ce dossier contient deja une lame (...)" }
 
 // Routes du workflow — detail est un OBJET
@@ -546,8 +552,8 @@ teste la présence de `code` dans `detail`, et
 ## 11. La route `/health` — un vrai contrôle
 
 ```python
-@app.get("/health")
-async def health_check():
+# services/health.py (la route est dans routers/health.py)
+async def check():
     database_state = {"status": "connected"}
     try:
         with database.engine.connect() as connection:
@@ -564,7 +570,7 @@ async def health_check():
                and instanseg_state.get("status") != "disconnected")
     payload = {"status": "ok" if healthy else "degraded", "backend": "connected",
                "instanseg": instanseg_state, "database": database_state}
-    return payload if healthy else JSONResponse(status_code=503, content=payload)
+    return healthy, payload   # le routeur renvoie 503 si healthy est faux
 ```
 
 Le commentaire du code est explicite : *« La base est réellement interrogée :

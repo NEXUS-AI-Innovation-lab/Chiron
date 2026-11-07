@@ -99,8 +99,8 @@ networks:
 | **Port 9001** | Console web — http://localhost:9001, `minioadmin`/`minioadmin`. |
 | **Persistance** | Volume `minio_data`. |
 
-**Pourquoi un `hostname` ET un `alias` réseau ?** Le backend a `minio:9000` en
-dur dans [main.py:75](../backend/main.py#L75). L'alias garantit que ce nom
+**Pourquoi un `hostname` ET un `alias` réseau ?** Le backend lit `MINIO_ENDPOINT` (défaut `minio:9000`) dans
+[config.py](../backend/config.py). L'alias garantit que ce nom
 résout, quelle que soit la manière dont Compose préfixe les noms de service.
 
 ### Organisation du bucket `biopsie`
@@ -128,7 +128,7 @@ d'emplacements**, du plus précis au plus large :
 4. listing de {folder}/**    # tout objet de lame, hors /extractions/
 ```
 
-Ce module est **partagé** par `main.py` et `seed_images.py` : sans lui, la même
+Ce module est **partagé** par les services de l'API et `seed_images.py` : sans lui, la même
 liste serait dupliquée à deux endroits avec le risque qu'elle diverge. C'est la
 correction de la difficulté décrite sur la diapositive 11 (« l'extraction
 échouait pour trois patients sur quatre »).
@@ -184,7 +184,7 @@ Patient
 > réponse du `POST /instances`, **mais pas** dans `GET /instances/{id}` (qui
 > n'expose que `ParentSeries`). Le relire par GET renvoyait toujours `None`,
 > donc un `502` systématique. Voir
-> [main.py:286-291](../backend/main.py#L286-L291).
+> `import_dicom()` dans [services/radiology.py](../backend/services/radiology.py).
 
 > **Dédoublonnage par UID.** Orthanc identifie une instance par son
 > `SOPInstanceUID`. Réimporter le même fichier ne crée pas de doublon : il
@@ -231,14 +231,16 @@ depends_on: [postgres, minio]
 
 ```
 1. import main.py
-2. apply_migrations()          → alembic upgrade head    (échec = log, pas crash)
-3. app = FastAPI()
-4. CORSMiddleware  allow_origins=["*"]                   ← ouvert à tout
-5. mkdir /app/dzi_data ; app.mount("/dzi_data", StaticFiles(...))
-6. include_router(workflow_router)
-7. Minio(...)          client MinIO
-8. InstanSegClient(...) client httpx  timeout 300 s
-9. uvicorn écoute sur 0.0.0.0:8002
+     ├─ config.py           lit les variables d'environnement
+     ├─ clients/            Minio(...) + InstanSegClient(...) (httpx, timeout 300 s)
+     ├─ app = FastAPI(lifespan=...)
+     ├─ CORSMiddleware  allow_origins=["*"]              ← ouvert à tout
+     ├─ mkdir /app/dzi_data ; app.mount("/dzi_data", StaticFiles(...))
+     └─ include_router × 7 (health, patients, biopsies, radiology,
+                            analysis, extractions, workflow)
+2. lifespan : apply_migrations_safely() → alembic upgrade head (échec = log, pas crash)
+3. uvicorn écoute sur 0.0.0.0:8002
+   (à l'arrêt : le lifespan ferme le client InstanSeg)
 ```
 
 ### Les deux volumes
@@ -253,25 +255,19 @@ depends_on: [postgres, minio]
 > lente : effacer des dizaines de milliers de petits fichiers sur un bind mount
 > Windows/Docker prend près d'une minute — d'où la stratégie « renommer puis
 > effacer en tâche de fond » de
-> [`_retirer_chemin()`](../backend/main.py#L1040-L1066).
+> [`retirer_chemin()`](../backend/services/tile_cleanup.py).
 
-### Incohérence de configuration à connaître
+### Configuration lue depuis l'environnement
 
-Le compose déclare `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`,
-`MINIO_BUCKET_NAME` — mais [main.py:75-78](../backend/main.py#L75-L78) les
-**ignore** et code les valeurs en dur :
+Le compose déclare `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` et
+`MINIO_BUCKET_NAME`. L'API les lit dans [`config.py`](../backend/config.py),
+avec comme valeurs par défaut celles qui étaient autrefois codées en dur dans
+`main.py`. La liste complète est dans
+[14 — Architecture backend §6](14-architecture-backend.md#6-la-configuration--configpy).
 
-```python
-MINIO_HOST = "minio:9000"
-ACCESS_KEY = "minioadmin"
-SECRET_KEY = "minioadmin"
-BUCKET_NAME = "biopsie"
-```
-
-Seul `seed_images.py` lit réellement l'environnement
-([lignes 33-43](../backend/seed_images.py#L33-L43)) — et encore, sous les noms
-`MINIO_HOST` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`, donc `MINIO_ENDPOINT`
-n'est lu **nulle part**. Voir [09 — Pièges](09-pieges-et-bugs.md).
+**Incohérence restante :** `seed_images.py` lit l'environnement sous d'autres
+noms ([lignes 33-43](../backend/seed_images.py#L33-L43)) : `MINIO_HOST` au lieu
+de `MINIO_ENDPOINT`. Voir [09 — Pièges, B12](09-pieges-et-bugs.md).
 
 `DATABASE_URL`, en revanche, est bien lu
 ([database.py:17](../backend/database.py#L17)).
@@ -322,7 +318,7 @@ n'est appelé par personne.
 PyTorch + le modèle pèsent ~13 Go. Les embarquer dans l'API métier donnait une
 image backend de **15 Go**. Isolés, le backend retombe à **1,7 Go** et n'est plus
 qu'un client HTTP :
-[`instanseg_client.py`](../backend/instanseg_client.py), 90 lignes.
+[`clients/instanseg.py`](../backend/clients/instanseg.py), 99 lignes.
 
 `requirements.txt` du backend le dit explicitement :
 

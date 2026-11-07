@@ -19,8 +19,8 @@
    │ SQLAlchemy 2 · Pydantic 2        │   │  :8042  │  │  :9091   │
    │ Alembic (migrations au boot)     │   │  PACS   │  │ externe  │
    │                                  │   └─────────┘  └──────────┘
-   │  main.py        workflow/        │        ▲
-   │  (historique)   (structure cible)│        │
+   │  routers/ → services/ → clients/ │        ▲
+   │  schemas/       workflow/        │        │
    └──┬────────┬─────────┬────────────┴────────┘
       │        │         │
       ▼        ▼         ▼
@@ -52,8 +52,8 @@ donc deux chaînes techniques complètes, réunies par un seul dossier patient.
 
 **Règle métier structurante :** un dossier patient ne porte **qu'une seule
 lame** et **qu'un seul examen radiologique**. Le backend refuse le second import
-avec un `409`. Voir [main.py:174](../backend/main.py#L174) et
-[main.py:257](../backend/main.py#L257).
+avec un `409`. Voir `import_biopsy()` dans [services/biopsies.py](../backend/services/biopsies.py) et
+`import_dicom()` dans [services/radiology.py](../backend/services/radiology.py).
 
 ---
 
@@ -86,7 +86,7 @@ OpenSeadragon lit le `.dzi`, calcule quelles tuiles couvrent la zone visible au
 niveau de zoom courant, et ne télécharge que celles-là. Le navigateur ne voit
 jamais plus de quelques centaines de Ko à la fois.
 
-Code : [main.py:218-227](../backend/main.py#L218-L227) (import applicatif) et
+Code : `tile_to_dzi()` dans [services/slide_processing.py](../backend/services/slide_processing.py) (import applicatif) et
 [seed_images.py:189-197](../backend/seed_images.py#L189-L197) (injection).
 
 > **`dzsave` attend un chemin SANS extension.** Il ajoute lui-même le `.dzi` et
@@ -98,23 +98,33 @@ Code : [main.py:218-227](../backend/main.py#L218-L227) (import applicatif) et
 
 ### Backend — deux zones distinctes
 
-Le backend est **volontairement scindé en deux**, et c'est la première chose à
-comprendre avant de toucher au code :
+Le backend est **découpé en couches**. C'est la première chose à comprendre
+avant de toucher au code. Tout est détaillé dans
+[14 — Architecture backend](14-architecture-backend.md).
 
-| Zone | Fichiers | Statut |
+| Couche | Dossier | Rôle |
 |---|---|---|
-| **Code historique** | [`main.py`](../backend/main.py) (1 150 lignes) | Tout dans un fichier : routes, schémas Pydantic, helpers, logique métier. **Ne plus l'étendre.** |
-| **Structure cible** | [`workflow/`](../backend/workflow/) | Découpage propre : `router.py` (HTTP) / `service.py` (métier) / `schemas.py` (contrats) / `constants.py` (données de référence). |
+| **Assemblage** | [`main.py`](../backend/main.py) (70 lignes) | Crée l'app, branche les routeurs, traduit les erreurs. Aucune route. |
+| **HTTP** | [`routers/`](../backend/routers/) | Une route = quelques lignes qui appellent un service. |
+| **Métier** | [`services/`](../backend/services/) | Règles, orchestration, base de données. Ne connaît pas HTTP. |
+| **Contrats** | [`schemas/`](../backend/schemas/) | Modèles Pydantic d'entrée et de sortie. |
+| **Externes** | [`clients/`](../backend/clients/) | MinIO, Orthanc, InstanSeg. |
+| **Workflow** | [`workflow/`](../backend/workflow/) | Même découpage, en un package autonome : `router.py` / `service.py` / `schemas.py` / `constants.py`. |
+
+Jusqu'à novembre 2026, tout sauf le workflow tenait dans un seul `main.py` de
+1 150 lignes. Il a été découpé sans changer l'API.
 
 Convention explicite du projet (README racine, §Conventions) : *« Le nouveau
 code va dans les modules dédiés (`backend/workflow/`, `frontend/src/features/`),
 pas dans les fichiers historiques. »*
 
-Le module `workflow` est branché dans l'app à
-[main.py:70-72](../backend/main.py#L70-L72) :
+Tous les routeurs, dont celui du workflow, sont branchés dans
+[main.py](../backend/main.py) :
 
 ```python
-from workflow.router import router as workflow_router
+app.include_router(health.router)
+app.include_router(patients.router)
+# ... biopsies, radiology, analysis, extractions
 app.include_router(workflow_router)
 ```
 
@@ -241,7 +251,7 @@ workflow pour les extractions créées avant l'existence du moteur — voir
         { x, y, width, height, patient_folder, patient_name,
           annotation_label, extraction_id }
 
-2. FastAPI  analyze_image_with_ai()                  [backend/main.py:547]
+2. FastAPI  analyze_image_with_ai()                  [services/analysis.py]
    ├─ résout le patient par folder_id
    ├─ download_biopsy_source()  ── MinIO ──▶ fichier temporaire
    │     essaie plusieurs emplacements (storage.candidate_object_keys)
@@ -287,7 +297,7 @@ Viewer.tsx
 
 **Le fichier TIFF pyramidal produit par `/extract-roi` n'est jamais affiché.**
 Il est généré, poussé dans MinIO, puis effacé du disque
-([main.py:740-741](../backend/main.py#L740-L741)). Le champ `url` renvoyé par
+(`create_from_region()` dans [services/extractions.py](../backend/services/extractions.py)). Le champ `url` renvoyé par
 `GET /patients/{folder_id}/extractions` pointe vers `/dzi_data/...` où plus
 aucun fichier n'existe — il est simplement inutilisé par le frontend. Voir
 [09 — Pièges](09-pieges-et-bugs.md#lextraction-tiff-est-produite-mais-jamais-affichée).
@@ -326,9 +336,9 @@ Le **proxy Vite** vers Orthanc existe pour deux raisons : contourner le CORS, et
 | OLGA ne fournit que la définition des formulaires | Format propriétaire isolé dans une couche anti-corruption unique | [`olgaAdapter.ts`](../frontend/src/features/workflow/olga/olgaAdapter.ts) |
 | Le workflow occupe 2 tables dédiées | JSONB par étape : un champ ajouté côté OLGA est conservé même sans colonne | [models.py:108-176](../backend/models.py#L108-L176) |
 | InstanSeg est un service séparé | Évite d'embarquer PyTorch dans l'API métier — image backend 15 Go → 1,7 Go | [`instanseg/`](../instanseg/) + [requirements.txt:14-17](../backend/requirements.txt#L14-L17) |
-| Alembic remplace `create_all` | `create_all` crée les tables absentes mais **n'ajoute jamais de colonne** | [main.py:29-42](../backend/main.py#L29-L42) |
-| Le travail lourd passe par `run_in_threadpool` | PyVips et MinIO sont synchrones : sur la boucle d'événements ils gelaient toute l'API | [main.py:209](../backend/main.py#L209), [218](../backend/main.py#L218), [555](../backend/main.py#L555) |
-| Suppression de tuiles : renommer puis effacer en tâche de fond | Un dossier de tuiles = des dizaines de milliers de fichiers ; l'effacer prend ~1 min | [main.py:1040-1066](../backend/main.py#L1040-L1066) |
+| Alembic remplace `create_all` | `create_all` crée les tables absentes mais **n'ajoute jamais de colonne** | [migrations.py](../backend/migrations.py) |
+| Le travail lourd passe par `run_in_threadpool` | PyVips et MinIO sont synchrones : sur la boucle d'événements ils gelaient toute l'API | [services/biopsies.py](../backend/services/biopsies.py), [services/analysis.py](../backend/services/analysis.py) |
+| Suppression de tuiles : renommer puis effacer en tâche de fond | Un dossier de tuiles = des dizaines de milliers de fichiers ; l'effacer prend ~1 min | [services/tile_cleanup.py](../backend/services/tile_cleanup.py) |
 | Confirmations par modale applicative, pas `window.confirm` | Le dialogue natif est désactivable par l'utilisateur → suppressions silencieusement inopérantes | [PatientCard.tsx:152-170](../frontend/src/components/PatientCard.tsx#L152-L170) |
 
 ---

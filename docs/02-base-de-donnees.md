@@ -116,7 +116,7 @@ gérée automatiquement par Alembic.
 folder_id = f"{safe_folder_name(payload.name)}-{uuid.uuid4().hex[:8]}"
 # ex. "William-30b14509"
 ```
-[main.py:146](../backend/main.py#L146)
+`create_patient()` dans [services/patients.py](../backend/services/patients.py)
 
 Le `safe_folder_name` ne garde que lettres/chiffres/`-`/`_`/espace, puis
 remplace les espaces par `-`. Ce même identifiant devient :
@@ -143,7 +143,7 @@ est vide ou réduit à un caractère
 | `id` | `INTEGER` PK | Indexé. |
 | `patient_id` | `INTEGER` FK → `patients.id` | |
 | `image_url` | `VARCHAR` | **Chemin relatif du fichier `.dzi`**, ex. `William-30b14509/CMU-1.dzi`. Résolu par le frontend en `${VITE_API_URL}/dzi_data/{image_url}`. |
-| `status` | `VARCHAR` | Statut libre. Seule valeur écrite par le code : `"Non analysé"` ([main.py:232](../backend/main.py#L232), [seed_images.py:118](../backend/seed_images.py#L118)). |
+| `status` | `VARCHAR` | Statut libre. Seule valeur écrite par le code : `"Non analysé"` ([services/biopsies.py](../backend/services/biopsies.py), [seed_images.py:118](../backend/seed_images.py#L118)). |
 
 > **`image_url` désigne le DZI, pas l'objet MinIO.** Les deux noms peuvent
 > diverger (les lames de démonstration sont tuilées sous d'autres noms). C'est
@@ -182,13 +182,13 @@ radiologie, documentée sur la diapositive 10 :
 | `Modality` | **série** | `GET /series/{id}` → `MainDicomTags` |
 | `PatientID`, `PatientName` | étude | `GET /studies/{id}` → `PatientMainDicomTags` |
 
-Code : [main.py:289-325](../backend/main.py#L289-L325).
+Code : `import_dicom()` dans [services/radiology.py](../backend/services/radiology.py).
 
 > **Contrainte métier :** `orthanc_study_id` sert de garde-fou anti-doublon.
 > Orthanc dédoublonne par UID DICOM ; réimporter le même fichier renvoie
 > l'étude déjà indexée. Le backend vérifie donc si une ligne existe déjà et
 > refuse avec un `409` en nommant le dossier propriétaire
-> ([main.py:327-350](../backend/main.py#L327-L350)).
+> (`import_dicom()` dans [services/radiology.py](../backend/services/radiology.py)).
 
 ---
 
@@ -280,7 +280,7 @@ Cette table de correspondance est encodée une seule fois, dans
 
 **Stratégie d'écriture :** `POST /annotations/save` **efface toutes les
 `drawings` de l'extraction puis les réinsère**
-([main.py:825-839](../backend/main.py#L825-L839)). Les `id` changent donc à
+(`save_annotations()` dans [services/extractions.py](../backend/services/extractions.py)). Les `id` changent donc à
 chaque sauvegarde. Il n'y a pas de mise à jour incrémentale.
 
 ---
@@ -395,7 +395,7 @@ brut **laisserait des orphelins** dans `biopsies`, `radiology_studies`,
 Seules les deux tables du workflow sont protégées au niveau SQL.
 
 **Ce que `DELETE /patients/{id}` supprime réellement**
-([main.py:945-1017](../backend/main.py#L945-L1017)) :
+(`delete_patient()` dans [services/patients.py](../backend/services/patients.py)) :
 
 | Ressource | Supprimée ? |
 |---|---|
@@ -415,7 +415,7 @@ Les migrations sont **appliquées automatiquement au démarrage du backend**, pa
 par une commande manuelle :
 
 ```python
-# backend/main.py:45-51 — s'exécute à l'import du module
+# backend/migrations.py — appelé par le `lifespan` de main.py, au démarrage du serveur
 try:
     apply_migrations()          # équivaut à `alembic upgrade head`
     print("✅ Schéma de base à jour (Alembic).")

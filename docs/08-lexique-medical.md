@@ -83,7 +83,7 @@ d'acquisition, date…
 
 | Où | |
 |---|---|
-| Extension | `.dcm` — seule acceptée par `POST /patients/{id}/upload-radiology` ([main.py:266](../backend/main.py#L266)) |
+| Extension | `.dcm` — seule acceptée par `POST /patients/{id}/upload-radiology` ([services/radiology.py](../backend/services/radiology.py)) |
 | Validation client | `/\.dcm$/i` ([UploadMedicalImage.tsx:25](../frontend/src/components/UploadMedicalImage.tsx#L25)) |
 | Bibliothèques | `dicom-parser`, `cornerstone-wado-image-loader` |
 | Images de démo | `backend/images_initiales/radiologie/*.DCM` |
@@ -95,7 +95,7 @@ radiologie » d'un établissement.
 | Où | |
 |---|---|
 | Conteneur | `orthanc` — `ORTHANC_NAME=Chiron PACS Radiologie` ([docker-compose.yml:44](../docker-compose.yml#L44)) |
-| Commentaires | `main.py:957` et `main.py:1130` : « purger un PACS est une opération à part » |
+| Commentaires | `services/patients.py` et `services/radiology.py` : « purger un PACS est une opération à part » |
 | Présentation | Diapositives 7 et 8 |
 
 ### Orthanc
@@ -106,7 +106,7 @@ réimplémenter le protocole DICOM.
 |---|---|
 | Image | `jodogne/orthanc-plugins:1.12.0` |
 | Ports | `8042` (REST + web), `4242` (DICOM natif) |
-| Identifiants | `orthanc` / `orthanc` — **en dur** dans `main.py` |
+| Identifiants | `orthanc` / `orthanc` — valeurs par défaut de `config.py` (`ORTHANC_USER` / `ORTHANC_PASSWORD`) |
 | Colonne | `radiology_studies.orthanc_study_id` |
 
 ### Modalité (*Modality*)
@@ -126,7 +126,7 @@ Le **type d'appareil** ayant produit l'image. Code DICOM à deux lettres.
 | Où | |
 |---|---|
 | Colonne SQL | `radiology_studies.modality` ([models.py:29](../backend/models.py#L29)) |
-| Lecture | **Au niveau de la SÉRIE** : `GET /series/{id}` → `MainDicomTags.Modality` ([main.py:310-323](../backend/main.py#L310-L323)) |
+| Lecture | **Au niveau de la SÉRIE** : `GET /series/{id}` → `MainDicomTags.Modality` ([services/radiology.py](../backend/services/radiology.py)) |
 | Repli | `"Inconnue"` (API) / `"OT"` (seeder) |
 | Affichage | `RadiologySchema.modality`, carte patient |
 
@@ -151,7 +151,7 @@ chaque métadonnée vit à un niveau différent.
 
 | Où | |
 |---|---|
-| Commentaire | `main.py:286-288` : « `ParentStudy` figure dans la réponse du POST, pas dans le détail de l'instance (qui n'expose que `ParentSeries`) : le relire par GET renvoyait toujours None, donc un 502 systématique » |
+| Commentaire | `services/radiology.py` : « `ParentStudy` figure dans la réponse du POST, pas dans le détail de l'instance (qui n'expose que `ParentSeries`) : le relire par GET renvoyait toujours None, donc un 502 systématique » |
 | Frontend | `GET /orthanc/studies/{studyId}/instances` puis `instances[0].ID` ([RadiologyViewer.tsx:99-106](../frontend/src/pages/RadiologyViewer.tsx#L99-L106)) |
 
 ### WADO / WADO-URI — *Web Access to DICOM Objects*
@@ -188,7 +188,7 @@ Zone délimitée par le praticien sur une image, pour la mesurer ou l'analyser.
 | Où | |
 |---|---|
 | Outils Cornerstone | `RectangleRoiTool`, `EllipticalRoiTool` |
-| Route backend | `POST /extract-roi` ([main.py:685](../backend/main.py#L685)) |
+| Route backend | `POST /extract-roi` ([routers/extractions.py](../backend/routers/extractions.py)) |
 | Colonnes SQL | `extractions.x`, `.y`, `.w`, `.h` |
 | API | Champ `roi: {x, y, w, h}` de `GET /patients/{folder_id}/extractions` |
 | Frontend | `initialROI`, `roiRect`, `location.state.roi` ([Viewer.tsx:73](../frontend/src/pages/Viewer.tsx#L73)) |
@@ -249,7 +249,7 @@ Techniquement un **TIFF pyramidal** avec des métadonnées propriétaires.
 | Où | |
 |---|---|
 | Constante | `SLIDE_EXTENSIONS = (".svs", ".tif", ".tiff")` ([storage.py:22](../backend/storage.py#L22)) |
-| Validation | `{".svs", ".tif", ".tiff"}` ([main.py:184](../backend/main.py#L184)) |
+| Validation | `{".svs", ".tif", ".tiff"}` ([services/biopsies.py](../backend/services/biopsies.py)) |
 | Extractions | Nommées `extraction_{timestamp}.svs` — bien qu'écrites en **TIFF** par `tiffsave` |
 | Présentation | Diapositives 3, 11, 14 |
 
@@ -267,7 +267,7 @@ CMU-1_files/
 
 | Où | |
 |---|---|
-| Génération | `image.dzsave(chemin, tile_size=256, overlap=1, suffix=".jpg")` ([main.py:218-227](../backend/main.py#L218-L227), [seed_images.py:189-197](../backend/seed_images.py#L189-L197)) |
+| Génération | `image.dzsave(chemin, tile_size=256, overlap=1, suffix=".jpg")` ([services/slide_processing.py](../backend/services/slide_processing.py), [seed_images.py:189-197](../backend/seed_images.py#L189-L197)) |
 | Dossier | `DZI_FOLDER = "/app/dzi_data"` — monté en statique sur `/dzi_data` |
 | Colonnes | `biopsies.image_url` (`{folder}/{nom}.dzi`), `extractions.dzi_url` |
 | Réconciliation | `reconcilier_tuiles()` ([seed_images.py:200](../backend/seed_images.py#L200)) |
@@ -493,7 +493,7 @@ Modèle de segmentation d'instances **spécialisé en histologie**.
 | Paquet | `instanseg-torch` (GitHub) |
 | Modèles | `brightfield_nuclei` (**le seul utilisé**), `fluorescence_nuclei_and_cells` |
 | Cibles | `nuclei`, `cells`, `all_outputs` |
-| Client | [`backend/instanseg_client.py`](../backend/instanseg_client.py) |
+| Client | [`backend/clients/instanseg.py`](../backend/clients/instanseg.py) |
 
 ### Fond clair (*brightfield*)
 Mode d'éclairage standard du microscope optique : la lumière traverse
@@ -510,7 +510,7 @@ et sa régularité sont les critères visuels majeurs de l'atypie cellulaire.
 | Où | |
 |---|---|
 | Paramètre | `target="nuclei"` |
-| Message | « • Noyaux détectés : {cell_count} » ([main.py:633](../backend/main.py#L633)) |
+| Message | « • Noyaux détectés : {cell_count} » ([services/analysis.py](../backend/services/analysis.py)) |
 | Présentation | Diapositives 1, 4, 8, 12 |
 
 ### Densité cellulaire
@@ -522,7 +522,7 @@ area_pixels = safe_w * safe_h
 density = round((cell_count / area_pixels) * 1000000)   # cellules / Mpx
 ```
 
-| Où | [main.py:628-629](../backend/main.py#L628-L629) · affiché « • Densité : {density} cellules / Mpx » |
+| Où | [services/analysis.py](../backend/services/analysis.py) · affiché « • Densité : {density} cellules / Mpx » |
 
 ### Pléomorphisme (nucléaire)
 **Variabilité de taille et de forme** des noyaux au sein d'une même population
@@ -541,7 +541,7 @@ if   max_size > avg_size * 3: pleomorphism = "Élevé (Atypies cytonucléaires m
 elif max_size > avg_size * 2: pleomorphism = "Modéré"
 ```
 
-| Où | [main.py:622-626](../backend/main.py#L622-L626) · Présentation diapositives 4 et 12 |
+| Où | [services/analysis.py](../backend/services/analysis.py) · Présentation diapositives 4 et 12 |
 
 > ⚠️ **C'est une heuristique simple**, pas une mesure validée cliniquement : elle
 > compare le maximum à la moyenne, ce qui est très sensible aux valeurs
@@ -554,7 +554,7 @@ Anomalies morphologiques du noyau et du cytoplasme : noyau volumineux,
 hyperchromatique (très sombre), contours irréguliers, nucléole proéminent. **Un
 signe majeur de malignité.**
 
-| Où | Message de résultat : « Élevé (**Atypies cytonucléaires** marquées) » ([main.py:624](../backend/main.py#L624)) |
+| Où | Message de résultat : « Élevé (**Atypies cytonucléaires** marquées) » ([services/analysis.py](../backend/services/analysis.py)) |
 
 ### Centroïde (*centroid*)
 Centre géométrique d'un objet segmenté — la moyenne des coordonnées de ses
@@ -562,7 +562,7 @@ pixels.
 
 | Où | |
 |---|---|
-| Schéma | `Instance.centroid_x`, `centroid_y` ([instanseg_client.py:12-13](../backend/instanseg_client.py#L12-L13)) |
+| Schéma | `Instance.centroid_x`, `centroid_y` ([clients/instanseg.py](../backend/clients/instanseg.py)) |
 | Calcul | `round(float(xs.mean()), 2)` ([instanseg/api.py:120-121](../instanseg/api.py#L120-L121)) |
 | Curiosité | Le backend appelle `segment_points(mode="centroids")`, valeur hors énumération — sans effet, la branche « contour » s'applique. Voir [05](05-api-endpoints.md#12-post-analyze-ai) |
 
@@ -582,7 +582,7 @@ Petite région extraite d'une image géante, envoyée au modèle. **Borné à
 
 | Où | |
 |---|---|
-| Garde serveur | `if safe_w > 1500 or safe_h > 1500` ([main.py:576](../backend/main.py#L576)) |
+| Garde serveur | `if safe_w > 1500 or safe_h > 1500` ([services/analysis.py](../backend/services/analysis.py)) |
 | Garde client | `if (cropW > 1500 \|\| cropH > 1500)` ([Viewer.tsx:303](../frontend/src/pages/Viewer.tsx#L303)) |
 | Message | « L'IA requiert un patch plus petit (zoom maximum) » |
 
