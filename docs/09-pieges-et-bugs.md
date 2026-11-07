@@ -189,12 +189,11 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8002";
 
 1. **`localhost:8002` est codé en dur** dans le backend — inutilisable ailleurs.
 2. **Le fichier n'existe pas sur disque.** `POST /extract-roi` écrit le TIFF,
-   le pousse dans MinIO, puis **l'efface** :
+   le pousse dans le stockage S3 (Garage), puis **l'efface** :
 
 ```python
 # services/extractions.py — create_from_region()
-minio_client.fput_object(bucket_name=BUCKET_NAME, object_name=minio_object_name,
-                         file_path=output_path)
+object_storage.upload_file(f"{safe_folder}/extractions/{filename_str}", output_path)
 if os.path.exists(output_path):
     os.remove(output_path)          # ← le fichier local disparaît
 ```
@@ -209,7 +208,7 @@ champ**. `openViewer()` rouvre la **lame complète** zoomée sur le `roi`.
 | Option | Détail |
 |---|---|
 | **Supprimer le champ** | Le plus honnête : il ne sert à rien et induit en erreur |
-| Servir depuis MinIO | Générer une URL présignée MinIO à la volée |
+| Servir depuis Garage | Générer une URL présignée S3 à la volée (`generate_presigned_url` de boto3) |
 | Rendre configurable | `os.getenv("PUBLIC_API_URL", "http://localhost:8002")` |
 
 ---
@@ -263,9 +262,9 @@ if source_path.exists():
         image = pyvips.Image.new_from_file(...)
         region.tiffsave(output_path, ...)
         try:
-            minio_client.fput_object(...)
-        except Exception as minio_err:
-            print(f"❌ Erreur MinIO : {minio_err}")      # ← avalé
+            object_storage.upload_file(...)
+        except Exception as storage_err:
+            print(f"❌ Erreur stockage S3 : {storage_err}")   # ← avalé
     except Exception as e:
         print(f"⚠️ Erreur PyVips: {e}")                  # ← avalé
     finally:
@@ -298,7 +297,7 @@ except Exception as error:
 ```python
 # services/extractions.py — delete_extraction()
 try:
-    minio_client.remove_object(BUCKET_NAME, ext.dzi_url)
+    object_storage.delete(ext.dzi_url)
 except Exception:
     pass                              # ← except NU
 
@@ -594,8 +593,12 @@ lancer `db.query(models.Biopsy).all()` avant l'existence des tables →
 > **Mise à jour (découpage du backend) :** l'API lit maintenant toute sa
 > configuration dans [`config.py`](../backend/config.py) (voir
 > [14 — Architecture backend §6](14-architecture-backend.md#6-la-configuration--configpy)).
-> Les variables `MINIO_*` du compose sont donc lues par l'API. **Reste à faire :**
-> aligner `seed_images.py`, qui lit `MINIO_HOST` au lieu de `MINIO_ENDPOINT`.
+> Les variables `MINIO_*` du compose sont donc lues par l'API.
+>
+> **Mise à jour (passage à Garage) : entièrement résolu.** Les variables
+> `MINIO_*` sont remplacées par `S3_*`, lues dans `config.py` par l'API **et**
+> le seeder. Le tableau ci-dessous décrit l'état d'avant. Voir
+> [15 — Stockage Garage](15-stockage-garage.md).
 
 | Variable | Déclarée | Lue par |
 |---|---|---|
@@ -802,13 +805,14 @@ Même configuration côté InstanSeg (`allow_credentials=False`, donc valide).
 | Service | Identifiants | Où |
 |---|---|---|
 | PostgreSQL | `user` / `password` | compose + `database.py` |
-| MinIO | `minioadmin` / `minioadmin` | compose + défauts de `config.py` |
+| Garage (S3) | clé `GK7f5b…` / secret de dev | compose + défauts de `config.py` |
+| Garage (admin) | jeton `GARAGE_ADMIN_TOKEN` | compose |
 | Orthanc | `orthanc` / `orthanc` | défauts de `config.py` |
 
 ### 🔒 S8. Aucun chiffrement
 
 Tous les services communiquent en HTTP clair sur le réseau conteneurisé.
-`Minio(..., secure=False)`.
+Le client S3 vise `http://garage:3900`, sans TLS.
 
 ### 🔒 S9. Mention HDS mensongère
 
@@ -866,9 +870,8 @@ docker logs p6_instanseg
 docker exec -it p6_postgres psql -U user -d p6_db
 docker exec p6_backend sh -c 'cd /app && alembic current'
 
-# Objets MinIO
-docker exec p6_minio mc alias set local http://localhost:9000 minioadmin minioadmin
-docker exec p6_minio mc ls --recursive local/biopsie
+# Objets dans Garage (S3)
+docker compose exec backend python -c "from clients.object_storage import object_storage as s; print(*s.list_keys(), sep='\n')"
 
 # Orthanc
 curl -u orthanc:orthanc http://localhost:8042/studies | jq

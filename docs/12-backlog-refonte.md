@@ -69,7 +69,8 @@ courante, `P2` = à planifier, `P3` = confort.
 | 1.1 | ✅ **Fait.** `main.py` fait 70 lignes et ne contient plus aucune route | | |
 | 1.2 | 🟡 **Partiel.** `lifespan` en place et `import main` ne touche plus la base. Pas encore d'app factory : les clients sont toujours créés à l'import | | |
 | 1.3 | 🟡 **Partiel.** Migrations sorties de l'import et isolées dans `migrations.py`, mais toujours lancées au démarrage (par le `lifespan`) | | |
-| 1.4 | 🟡 **Partiel.** `config.py` centralise la configuration de l'API ; `database.py` et `seed_images.py` lisent encore l'environnement eux-mêmes | | |
+| 1.4 | 🟡 **Partiel.** `config.py` centralise la configuration de l'API, et celle du stockage S3 pour le seeder aussi (passage à Garage) ; `database.py` et les variables Orthanc du seeder lisent encore l'environnement eux-mêmes | | |
+| — | ✅ **Stockage objet :** MinIO remplacé par Garage, client `minio` par boto3 ([15 — Stockage Garage](15-stockage-garage.md)) | | |
 | 1.5 | ✅ **Fait côté API.** `clients/orthanc.py` ; le seeder garde ses propres appels | | |
 | 1.6 | 🟡 **Partiel.** L'URL vient de `config.PUBLIC_API_URL`, mais le défaut reste `localhost` | | |
 | 1.7 | ⬜ Non traité (les implémentations ont été déplacées, pas fusionnées) | | |

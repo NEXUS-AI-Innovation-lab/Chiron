@@ -19,7 +19,7 @@ explicitement.
 | 2 | [08 — Lexique médical](08-lexique-medical.md) | 1 h | Lire le code sans buter sur `sbr_grade`, `HES`, `WSI`, `DZI` |
 | 3 | [03 — Docker](03-docker.md) | 1 h 30 | Démarrer la pile, diagnostiquer un conteneur mort |
 | 4 | [02 — Base de données](02-base-de-donnees.md) | 2 h | Écrire une requête, ajouter une colonne, créer une migration |
-| 5 | [04 — Backend](04-backend.md) puis [14 — Architecture backend](14-architecture-backend.md) | 3 h 30 | Savoir dans quel fichier se trouve chaque route, ajouter une fonctionnalité dans la bonne couche |
+| 5 | [04 — Backend](04-backend.md) puis [14 — Architecture backend](14-architecture-backend.md) et [15 — Stockage Garage](15-stockage-garage.md) | 4 h | Savoir dans quel fichier se trouve chaque route, ajouter une fonctionnalité dans la bonne couche |
 | 6 | [05 — Endpoints d'API](05-api-endpoints.md) | 2 h | Appeler n'importe quelle route, connaître ses codes d'erreur |
 | 7 | [11 — React + Vite de zéro](11-react-vite-de-zero.md) | 3 h | **Si React vous est inconnu :** comprendre composants, hooks, état, stores, routage |
 | 8 | [06 — Frontend](06-frontend.md) | 3 h | Situer chaque `.tsx` de Chiron, fichier par fichier |
@@ -43,7 +43,7 @@ d'imagerie médicale** qui ne se parlent normalement pas :
 - la **radiologie DICOM** (scanner, IRM, radio) — servie par un PACS Orthanc,
   affichée par Cornerstone.js ;
 - l'**anatomopathologie** et ses **lames numérisées** (WSI, 100 Mo à plusieurs
-  Go) — stockées dans MinIO, découpées en pyramide de tuiles DZI par PyVips,
+  Go) — stockées dans Garage, découpées en pyramide de tuiles DZI par PyVips,
   affichées par OpenSeadragon.
 
 S'y ajoutent :
@@ -59,7 +59,7 @@ S'y ajoutent :
 
 | Élément | Valeur |
 |---|---|
-| Conteneurs Docker | **7** (`postgres`, `minio`, `orthanc`, `backend`, `instanseg`, `frontend`, `image_seeder`) |
+| Conteneurs Docker | **8** (`postgres`, `garage`, `garage_init`, `orthanc`, `backend`, `instanseg`, `frontend`, `image_seeder`) |
 | Routes d'API backend | **20** (+ 1 point de montage statique `/dzi_data`) |
 | Routes du micro-service InstanSeg | **4** |
 | Tables métier | **7** (+ `alembic_version`) |
@@ -94,7 +94,7 @@ service. Le mot de passe saisi n'est jamais transmis. Conséquence directe :
 | Application | http://localhost:5173 | orthanc/orthanc |
 | API + Swagger | http://localhost:8002/docs | — |
 | InstanSeg | http://localhost:7000/docs | — |
-| Console MinIO | http://localhost:9001 | `minioadmin` / `minioadmin` |
+| Garage (S3) | http://localhost:3900, bucket `biopsie` | clé `S3_ACCESS_KEY` / `S3_SECRET_KEY` du compose (pas de console web) |
 | Orthanc | http://localhost:8042 | `orthanc` / `orthanc` |
 | OLGA (stack externe) | http://localhost:9091 | — |
 

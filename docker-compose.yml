@@ -14,25 +14,45 @@ services:
     networks:
       - app_network
 
-  # --- Object Storage Imagerie (MinIO) ---
-  minio:
-      # MinIO ne publie plus d'images Docker depuis fin 2025 : fork communautaire compatible
-      image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
-      container_name: p6_minio
-      hostname: minio
-      ports:
-        - "9000:9000"
-        - "9001:9001"
-      environment:
-        MINIO_ROOT_USER: minioadmin
-        MINIO_ROOT_PASSWORD: minioadmin
-      volumes:
-        - minio_data:/data
-      command: server /data --console-address ":9001"
-      networks:
-        app_network:
-          aliases:
-            - minio
+  # --- Stockage objet des lames (Garage, compatible S3) ---
+  # Remplace MinIO. Configuration : garage/garage.toml. Les secrets ci-dessous
+  # sont des valeurs de DÉVELOPPEMENT, à remplacer en déploiement.
+  garage:
+    image: dxflrs/garage:v2.5.0
+    container_name: p6_garage
+    hostname: garage
+    ports:
+      - "3900:3900"   # API S3 (celle qu'utilisent le backend et le seeder)
+      - "3903:3903"   # API d'administration (jeton GARAGE_ADMIN_TOKEN)
+    environment:
+      GARAGE_RPC_SECRET: acc5b7176114a07717dfc817f4e2fea4f449567b5437f75fd5a5f7f593e247eb
+      GARAGE_ADMIN_TOKEN: e9fa5a405b6f343b8f6db6fdd3043cd75e2f07997317e9c1
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    networks:
+      - app_network
+
+  # --- Initialisation de Garage (s'exécute puis s'arrête) ---
+  # Un Garage neuf n'a ni disposition, ni clé, ni bucket : ce conteneur les
+  # crée (idempotent), avant que le backend et le seeder démarrent.
+  garage_init:
+    image: python:3.12-alpine
+    container_name: p6_garage_init
+    command: python /garage/init_garage.py
+    environment:
+      GARAGE_ADMIN_URL: http://garage:3903
+      GARAGE_ADMIN_TOKEN: e9fa5a405b6f343b8f6db6fdd3043cd75e2f07997317e9c1
+      S3_ACCESS_KEY: GK7f5b9f737e5d1f5b2d907639
+      S3_SECRET_KEY: baa7d18ca1d495315d4bf859e05dd3a3f2898ccff58f634c7f309f1764c47939
+      S3_BUCKET: biopsie
+    volumes:
+      - ./garage:/garage:ro
+    depends_on:
+      - garage
+    networks:
+      - app_network
 
   # --- PACS Radiologie (Orthanc) ---
   orthanc:
@@ -60,13 +80,17 @@ services:
       - "8002:8002"
     environment:
       - DATABASE_URL=postgresql://user:password@p6_postgres:5432/p6_db
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET_NAME=biopsie
+      - S3_ENDPOINT=http://garage:3900
+      - S3_REGION=garage
+      - S3_ACCESS_KEY=GK7f5b9f737e5d1f5b2d907639
+      - S3_SECRET_KEY=baa7d18ca1d495315d4bf859e05dd3a3f2898ccff58f634c7f309f1764c47939
+      - S3_BUCKET=biopsie
     depends_on:
-      - postgres
-      - minio
+      postgres:
+        condition: service_started
+      # Attend que la clé et le bucket existent dans Garage.
+      garage_init:
+        condition: service_completed_successfully
     networks:
       - app_network
 
@@ -114,16 +138,30 @@ services:
     command: python seed_images.py
     volumes:
       - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://user:password@p6_postgres:5432/p6_db
+      - S3_ENDPOINT=http://garage:3900
+      - S3_REGION=garage
+      - S3_ACCESS_KEY=GK7f5b9f737e5d1f5b2d907639
+      - S3_SECRET_KEY=baa7d18ca1d495315d4bf859e05dd3a3f2898ccff58f634c7f309f1764c47939
+      - S3_BUCKET=biopsie
     depends_on:
-      - backend
-      - orthanc
-      - minio
+      backend:
+        condition: service_started
+      orthanc:
+        condition: service_started
+      garage_init:
+        condition: service_completed_successfully
     networks:
       - app_network
 
 volumes:
   postgres_data:
+  # Ancien volume MinIO : plus utilisé par la pile, conservé pour pouvoir
+  # migrer ses objets vers Garage (voir docs/15-stockage-garage.md).
   minio_data:
+  garage_meta:
+  garage_data:
   orthanc_data:
 
 networks:

@@ -1,6 +1,6 @@
 """Analyse IA d'une région de lame par InstanSeg (segmentation des noyaux).
 
-Déroulé : télécharger la lame source depuis MinIO → borner la région →
+Déroulé : télécharger la lame source depuis le stockage S3 → borner la région →
 la découper en PNG → l'envoyer à InstanSeg → calculer les indicateurs
 (nombre de noyaux, densité, taille moyenne, pléomorphisme).
 """

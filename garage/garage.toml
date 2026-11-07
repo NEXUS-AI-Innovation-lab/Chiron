@@ -1,0 +1,31 @@
+# Configuration de Garage, le stockage objet S3 de Chiron (remplace MinIO).
+#
+# Un seul nœud, sans réplication : c'est une pile de développement. Les
+# secrets (rpc_secret, admin_token) ne sont PAS ici : Garage les lit dans les
+# variables d'environnement GARAGE_RPC_SECRET et GARAGE_ADMIN_TOKEN, fournies
+# par docker-compose.yml.
+#
+# Documentation : https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+# 1 = une seule copie de chaque objet. Suffisant sur un seul nœud.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# Le client S3 (boto3) doit annoncer exactement cette région.
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+# Adressage par chemin (http://garage:3900/biopsie/cle) : le backend
+# n'utilise pas les sous-domaines de bucket.
+root_domain = ".s3.garage.localhost"
+
+[admin]
+# API d'administration, utilisée par garage/init_garage.py pour créer la
+# disposition du cluster, la clé d'accès et le bucket.
+api_bind_addr = "[::]:3903"

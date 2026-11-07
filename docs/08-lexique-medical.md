@@ -216,7 +216,7 @@ Par extension dans Chiron : la lame numérisée issue de ce prélèvement.
 |---|---|
 | Table SQL | `biopsies` ([models.py:37-43](../backend/models.py#L37-L43)) |
 | Modèle | `class Biopsy(Base)` |
-| Bucket MinIO | **`biopsie`** (singulier, sans « s ») |
+| Bucket Garage | **`biopsie`** (singulier, sans « s ») |
 | Route | `POST /patients/{id}/upload-biopsy`, `DELETE /biopsies/{id}` |
 | Interface | Bouton « Biopsie » sur la carte patient ; onglet « Biopsie WSI » |
 | Dossier | `backend/images_initiales/biopsie/` |

@@ -60,7 +60,7 @@ projet**, et **comment l'utiliser**.
 | `requests` | 2.32.5 | Client HTTP **synchrone** (Orthanc) |
 | `httpx` | 0.28.1 | Client HTTP **asynchrone** (InstanSeg) |
 | `pyvips` | 3.1.1 | Traitement d'images géantes |
-| `minio` | 7.2.20 | Client S3 |
+| `boto3` / `botocore` | 1.42.97 | Client S3 (stockage Garage) |
 | `numpy` | 2.0.2 | Statistiques sur les instances |
 | `alembic` | 1.16.5 | Migrations de schéma |
 
@@ -717,7 +717,7 @@ app.include_router(router)
 ```python
 # Dans une route async, tout appel synchrone passe par run_in_threadpool
 from starlette.concurrency import run_in_threadpool
-await run_in_threadpool(minio_client.fput_object, bucket, name, path)
+await run_in_threadpool(object_storage.upload_file, key, path)
 ```
 
 Documentation : https://fastapi.tiangolo.com/
@@ -861,32 +861,41 @@ Documentation : https://libvips.github.io/pyvips/
 
 ---
 
-### MinIO Python 7.2
+### boto3 1.42 (client S3)
 
 | | |
 |---|---|
-| **À quoi ça sert** | Client S3 pour le stockage objet. |
-| **Où** | [`clients/object_storage.py`](../backend/clients/object_storage.py), [`storage.py`](../backend/storage.py), [`seed_images.py`](../backend/seed_images.py) |
+| **À quoi ça sert** | Client S3 officiel d'AWS, utilisé ici avec **Garage**. Remplace la bibliothèque `minio` depuis novembre 2026. |
+| **Où** | [`clients/object_storage.py`](../backend/clients/object_storage.py) uniquement. Le reste du code passe par `object_storage`. |
+| **Détail** | [15 — Stockage Garage](15-stockage-garage.md) |
 
 ```python
-from minio import Minio
+import boto3
+from botocore.config import Config
 
-client = Minio("minio:9000", access_key="minioadmin",
-               secret_key="minioadmin", secure=False)   # secure=False = HTTP
+client = boto3.client(
+    "s3",
+    endpoint_url="http://garage:3900",
+    region_name="garage",                       # = s3_region de garage.toml
+    aws_access_key_id="GK...", aws_secret_access_key="...",
+    config=Config(s3={"addressing_style": "path"}),   # pas de sous-domaine
+)
 
-client.bucket_exists("biopsie")
-client.make_bucket("biopsie")
-
-client.fput_object(bucket, "dossier/fichier.svs", "/chemin/local")   # envoyer
-client.fget_object(bucket, "dossier/fichier.svs", "/chemin/local")   # récupérer
-client.stat_object(bucket, cle)          # EXISTE ? (ne télécharge RIEN)
-client.remove_object(bucket, cle)
-client.list_objects(bucket, prefix="dossier/", recursive=True)
+client.upload_file("/chemin/local", "biopsie", "dossier/fichier.svs")   # envoyer
+client.download_file("biopsie", "dossier/fichier.svs", "/chemin/local") # récupérer
+client.head_object(Bucket="biopsie", Key=cle)   # EXISTE ? (ne télécharge RIEN)
+client.delete_object(Bucket="biopsie", Key=cle)
+client.get_paginator("list_objects_v2").paginate(Bucket="biopsie", Prefix="dossier/")
 ```
 
-> **`stat_object` est la méthode clé** de `storage.find_object_key` : elle teste
-> l'existence sans rapatrier plusieurs centaines de Mo. Elle **lève** si l'objet
-> n'existe pas — d'où le `try/except` en boucle.
+Dans Chiron, on écrit plutôt `object_storage.upload_file(cle, chemin)`,
+`object_storage.exists(cle)`, etc. : la classe `ObjectStorage` cache ces
+détails.
+
+> **`exists()` (un `head_object`) est la méthode clé** de
+> `storage.find_object_key` : elle teste l'existence sans rapatrier plusieurs
+> centaines de Mo. Une absence lève une `ClientError` « 404 », que
+> `exists()` transforme en `False`.
 
 > **Ces appels sont SYNCHRONES.** Dans une route `async def` :
 > `await run_in_threadpool(client.fput_object, …)`.
@@ -1026,7 +1035,7 @@ et `0` est le fond.
 | Générer un PDF | `RadiologyViewer.handleExportPDF` — jsPDF |
 | Capturer l'écran | `Viewer.handleDownloadSnapshot` — dom-to-image |
 | Traiter une grande image | `backend/services/slide_processing.py` — PyVips |
-| Lire/écrire dans MinIO | `backend/storage.py` + client dans `backend/clients/object_storage.py` |
+| Lire/écrire dans le stockage S3 (Garage) | `backend/storage.py` + `object_storage` dans `backend/clients/object_storage.py` |
 | Appeler InstanSeg | `backend/clients/instanseg.py` — httpx |
 | Appeler Orthanc | `backend/clients/orthanc.py` — requests |
 | Modifier le schéma | `backend/models.py` + Alembic |

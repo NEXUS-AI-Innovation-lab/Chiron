@@ -60,7 +60,7 @@ lignes) :
                               │             │
                 ┌─────────────▼───┐   ┌─────▼──────────────────┐
                 │ models.py       │   │ clients/               │
-                │ database.py     │   │ MinIO · Orthanc ·      │
+                │ database.py     │   │ Garage · Orthanc ·     │
                 │ (PostgreSQL)    │   │ InstanSeg              │
                 └─────────────────┘   └────────────────────────┘
 
@@ -82,7 +82,7 @@ backend/
 ├── migrations.py           32 l.  Alembic « upgrade head » au démarrage
 ├── database.py             38 l.  Engine, SessionLocal, Base, get_db        (inchangé)
 ├── models.py              176 l.  Tables SQLAlchemy                          (inchangé)
-├── storage.py              78 l.  Où chercher une lame dans MinIO (partagé)  (inchangé)
+├── storage.py              78 l.  Où chercher une lame dans le stockage S3 (partagé)
 ├── seed_images.py         324 l.  Injection des images de démo              (inchangé)
 │
 ├── routers/                       COUCHE HTTP — une route = quelques lignes
@@ -96,7 +96,7 @@ backend/
 ├── services/                      COUCHE MÉTIER — ne connaît pas HTTP
 │   ├── errors.py                  ServiceError et ses sous-classes (404, 409...)
 │   ├── patients.py                Créer, lister, supprimer un dossier
-│   ├── biopsies.py                Importer une lame, la récupérer depuis MinIO, la supprimer
+│   ├── biopsies.py                Importer une lame, la récupérer depuis Garage, la supprimer
 │   ├── radiology.py               Import DICOM via Orthanc, compte-rendu, détachement
 │   ├── analysis.py                Analyse IA : région → PNG → InstanSeg → bilan
 │   ├── extractions.py             Créer / annoter / lister / supprimer une extraction
@@ -111,7 +111,7 @@ backend/
 │   └── extractions.py             AnalysisPayload, DrawingSchema
 │
 ├── clients/                       SERVICES EXTERNES — « comment leur parler »
-│   ├── object_storage.py          Client MinIO partagé + ensure_bucket()
+│   ├── object_storage.py          Client S3 boto3 (Garage) : object_storage
 │   ├── orthanc.py                 upload_instance(), get_study(), get_series()
 │   └── instanseg.py               Client httpx d'InstanSeg (ex-instanseg_client.py)
 │
@@ -132,7 +132,7 @@ rien y gagner.
 
 | Couche | Rôle | A le droit de | N'a PAS le droit de |
 |---|---|---|---|
-| **`routers/`** | Déclarer les URL | Lire les paramètres, appeler **un** service, renvoyer sa réponse, brancher une `BackgroundTasks` | Faire une requête SQL, appeler MinIO/Orthanc, contenir un `if` métier |
+| **`routers/`** | Déclarer les URL | Lire les paramètres, appeler **un** service, renvoyer sa réponse, brancher une `BackgroundTasks` | Faire une requête SQL, appeler le stockage S3 ou Orthanc, contenir un `if` métier |
 | **`services/`** | Appliquer les règles métier | Utiliser `db`, `models`, `clients/`, `config`, lever une `ServiceError` | Importer `HTTPException`, connaître les codes HTTP autrement que via `errors.py` |
 | **`schemas/`** | Décrire les données échangées | Déclarer des champs et des valeurs par défaut | Contenir de la logique ou des accès à la base |
 | **`clients/`** | Parler à un service externe | Ouvrir une connexion, faire un appel réseau | Connaître les patients, les lames ou une règle métier |
@@ -218,16 +218,20 @@ Toutes les adresses et tous les identifiants sont dans
 |---|---|---|
 | `DZI_FOLDER` | `/app/dzi_data` | `main.py` (fichiers statiques), services de lames |
 | `PUBLIC_API_URL` | `http://localhost:8002` | `url` renvoyée par `GET /patients/{folder}/extractions` |
-| `MINIO_ENDPOINT` | `minio:9000` | `clients/object_storage.py` |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | `minioadmin` | `clients/object_storage.py` |
-| `MINIO_BUCKET_NAME` | `biopsie` | `clients/object_storage.py` |
+| `S3_ENDPOINT` | `http://garage:3900` | `clients/object_storage.py` |
+| `S3_REGION` | `garage` | `clients/object_storage.py` |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | clé de développement | `clients/object_storage.py` |
+| `S3_BUCKET` | `biopsie` | `clients/object_storage.py` |
 | `ORTHANC_URL` | `http://orthanc:8042` | `clients/orthanc.py` |
 | `ORTHANC_USER` / `ORTHANC_PASSWORD` | `orthanc` | `clients/orthanc.py` |
 | `INSTANSEG_URL` | `http://instanseg:7000` | `clients/instanseg.py` |
 | `DATABASE_URL` | (voir `database.py`) | `database.py`, non déplacé |
 
-Les valeurs par défaut sont **exactement** celles qui étaient écrites en dur
-dans l'ancien `main.py`. Conséquence : les variables `MINIO_*` déclarées dans
+> **Depuis le passage à Garage**, les variables `MINIO_*` sont remplacées
+> par `S3_*`, lues aussi par le seeder : voir [15 — Stockage Garage](15-stockage-garage.md).
+
+Lors du découpage, les valeurs par défaut étaient **exactement** celles qui
+étaient écrites en dur dans l'ancien `main.py`. Conséquence : les variables `MINIO_*` déclarées dans
 `docker-compose.yml`, autrefois ignorées (piège B12), sont **enfin lues**. Comme
 elles ont les mêmes valeurs, rien ne change en pratique.
 
@@ -240,7 +244,7 @@ elles ont les mêmes valeurs, rien ne change en pratique.
 
 ```
 1. uvicorn importe main.py
-     ├─ import config, clients/* → création des clients MinIO et InstanSeg
+     ├─ import config, clients/* → création des clients S3 (boto3) et InstanSeg
      │                              (aucune connexion ouverte à ce stade)
      ├─ app = FastAPI(lifespan=lifespan)
      ├─ CORS, gestionnaire de ServiceError
@@ -305,7 +309,7 @@ discussion :
 | `apply_migrations()` + son appel à l'import | `migrations.py` (`apply_migrations`, `apply_migrations_safely`), appelé par le `lifespan` |
 | `app = FastAPI()`, CORS, `app.mount("/dzi_data")` | `main.py` |
 | `DZI_FOLDER`, `MINIO_HOST`, `ACCESS_KEY`, `SECRET_KEY`, `BUCKET_NAME` | `config.py` |
-| `minio_client`, `ensure_minio_bucket()` | `clients/object_storage.py` (`minio_client`, `ensure_bucket`) |
+| `minio_client`, `ensure_minio_bucket()` | `clients/object_storage.py` (`object_storage`, `ensure_bucket`), en boto3 depuis le passage à Garage |
 | `instanseg_client = InstanSegClient(...)` | `clients/instanseg.py` (en bas du fichier) |
 | `instanseg_client.py` (fichier entier) | `clients/instanseg.py` (déplacé avec `git mv`) |
 | Appels `requests` vers `http://orthanc:8042` | `clients/orthanc.py` |
@@ -377,7 +381,7 @@ module dans `clients/`. Les services l'importent de là.
 - écrire une requête SQL dans un routeur ;
 - lever `HTTPException` dans un service (utilisez `services/errors.py`) ;
 - écrire une URL ou un mot de passe ailleurs que dans `config.py` ;
-- appeler PyVips, MinIO ou `requests` depuis une fonction `async` sans
+- appeler PyVips, boto3 (S3) ou `requests` depuis une fonction `async` sans
   `run_in_threadpool`.
 
 **Tester un service sans serveur :**
