@@ -28,6 +28,7 @@ import WorkflowStepper from "../features/workflow/components/WorkflowStepper";
 import { STEP_COUNT } from "../features/workflow/steps";
 import { useOlgaForm } from "../features/workflow/useOlgaForm";
 import { useWorkflow } from "../features/workflow/useWorkflow";
+import { apiFetch } from "../services/http";
 
 type ToolType = "move" | "rect" | "circle" | "polygon" | "text";
 
@@ -335,7 +336,7 @@ export default function Viewer() {
     };
 
     try {
-      const response = await fetch(`${baseUrl}/analyze-ai`, {
+      const response = await apiFetch(`${baseUrl}/analyze-ai`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -1108,7 +1109,7 @@ export default function Viewer() {
     if (extractionId) {
       setLoading(true);
       const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8002";
-      fetch(`${baseUrl}/extractions/${extractionId}/details`)
+      apiFetch(`${baseUrl}/extractions/${extractionId}/details`)
         .then((res) => res.json())
         .then((data) => {
           if (data.drawings) {
@@ -1210,7 +1211,7 @@ export default function Viewer() {
       const url = isAnnotationMode
         ? `${baseUrl}/annotations/save`
         : `${baseUrl}/extract-roi`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

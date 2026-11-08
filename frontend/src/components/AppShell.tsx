@@ -19,6 +19,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 import { useTheme } from "../features/theme/themeContext";
+import { useAuth } from "../features/auth/authContext";
 import Logo from "./Logo";
 
 interface AppShellProps {
@@ -44,9 +45,12 @@ function initialsOf(name: string): string {
 export default function AppShell({ title, user, actions, children }: AppShellProps) {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { signOut } = useAuth();
 
-  const handleLogout = () => {
-    localStorage.removeItem("biopsie_user");
+  // Ferme la session Supabase ; AuthProvider efface aussi la clé historique
+  // `biopsie_user`.
+  const handleLogout = async () => {
+    await signOut();
     navigate("/login");
   };
 

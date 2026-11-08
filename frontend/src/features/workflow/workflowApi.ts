@@ -6,8 +6,8 @@
  * légitime à afficher, pas une erreur technique.
  */
 
-const API_URL: string =
-  import.meta.env.VITE_API_URL || "http://localhost:8002";
+// apiFetch joint le jeton de session Supabase, exigé par le backend.
+import { API_URL, apiFetch } from "../../services/http";
 
 export interface WorkflowStepState {
   step: string;
@@ -52,7 +52,7 @@ export class WorkflowApiError extends Error {
 async function request(path: string, init?: RequestInit): Promise<WorkflowState> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, {
+    response = await apiFetch(`${API_URL}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });

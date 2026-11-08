@@ -12,6 +12,7 @@ import AddIcon from '@mui/icons-material/Add';
 import axios from 'axios';
 
 import { deleteBiopsy, deletePatient, deleteRadiologyStudy } from '../services/api';
+import { apiFetch } from "../services/http";
 
 interface Biopsy {
   id: number;
@@ -84,7 +85,7 @@ const PatientCard = ({ patient, onDeleted }: { patient: Patient; onDeleted?: () 
     const checkExisting = async () => {
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002';
-            const res = await fetch(`${apiUrl}/patients/${patient.folder_id}/extractions`);
+            const res = await apiFetch(`${apiUrl}/patients/${patient.folder_id}/extractions`);
             const data = await res.json();
             if (data && data.length > 0) {
                 setHasExtractions(true);
@@ -116,7 +117,7 @@ const PatientCard = ({ patient, onDeleted }: { patient: Patient; onDeleted?: () 
   const executerSuppressionExtraction = async (id: number) => {
     try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002';
-        const res = await fetch(`${apiUrl}/extractions/${id}?username=${encodeURIComponent(doctorName)}`, {
+        const res = await apiFetch(`${apiUrl}/extractions/${id}?username=${encodeURIComponent(doctorName)}`, {
             method: 'DELETE'
         });
 
