@@ -28,6 +28,7 @@ vérifiait rien (sécurité S1 dans [09 — Pièges](09-pieges-et-bugs.md)).
 12. [Limites connues](#12-limites-connues)
 13. [Ce qui a changé, fichier par fichier](#13-ce-qui-a-changé-fichier-par-fichier)
 14. [Comment le changement a été vérifié](#14-comment-le-changement-a-été-vérifié)
+15. [Passer à un projet hébergé](#15-passer-à-un-projet-hébergé)
 
 ---
 
@@ -524,3 +525,123 @@ InstanSeg) :
 **Non vérifié :** l'analyse IA (InstanSeg non démarré) et l'enregistrement
 d'un compte rendu radiologique depuis l'interface. Ces deux chemins passent
 par le même `apiFetch` que les appels testés.
+
+---
+
+## 15. Passer à un projet hébergé
+
+Le Supabase local (§1) suffit pour développer. Pour que **toute l'équipe partage
+la même base et les mêmes comptes** (objectif de US-71), il faut un projet sur
+supabase.com. Le code ne change pas : seules les valeurs de connexion changent.
+
+### 15.1 Créer le projet
+- https://supabase.com/dashboard, « New project », région **Europe (Paris)**.
+- Noter le **mot de passe de la base** (plus jamais affiché) et la **référence**
+  du projet (`https://<ref>.supabase.co`).
+- Offre gratuite : 500 Mo, **pause après 7 jours sans activité** (à réactiver
+  avant une démo).
+
+### 15.2 Clés de signature des jetons ⚠️
+Le backend n'accepte que des jetons **ES256 ou RS256** (`services/auth.py`).
+Dans **Project Settings → JWT Keys**, si le projet n'a que le « Legacy JWT
+secret » (HS256), créer une clé **ECC (P-256)** et la rendre active. Contrôle :
+`https://<ref>.supabase.co/auth/v1/.well-known/jwks.json` contient `"alg": "ES256"`.
+Sinon, toute requête au backend répond `401` juste après la connexion.
+
+### 15.3 Pousser la migration Supabase
+Depuis la racine du dépôt :
+
+```bash
+supabase login
+```
+
+```bash
+supabase link --project-ref <ref>
+```
+
+```bash
+supabase db push
+```
+
+`db push` retire les droits des rôles publics sur `public` (§4). **Obligatoire** :
+sans elle, la clé publique du frontend donne accès aux tables. RLS est activé
+ensuite par Alembic, au démarrage du backend.
+
+### 15.4 Régler l'authentification (tableau de bord)
+`supabase/config.toml` ne règle **que** le Supabase local.
+
+| Où | Réglage |
+|---|---|
+| Authentication → URL Configuration | *Site URL* `http://localhost:5173` ; *Redirect URLs* : ajouter `http://localhost:5173/reinitialisation` |
+| Authentication → Providers → Email | Mot de passe : 10 caractères, minuscules, majuscules, chiffres |
+| Authentication → Providers → Email | *Confirm email* activé par défaut : l'inscription affiche « Vérifiez vos e-mails » |
+| Authentication → Sign In / Providers | *Allow new users to sign up* : à décocher si les comptes sont créés par un administrateur (US-04a) |
+| Authentication → SMTP Settings | L'envoi intégré est limité à quelques e-mails par heure : brancher un SMTP pour de vrais utilisateurs |
+
+### 15.5 Récupérer les valeurs
+Bouton **Connect** du tableau de bord :
+- onglet **Framework** : l'adresse du projet et la clé `sb_publishable_…`
+  (ignorer les instructions Next.js : Chiron utilise Vite, et `supabase-js` est
+  déjà installé) ;
+- onglet **Direct**, méthode **Session pooler** : la chaîne PostgreSQL.
+  Pas la *Direct connection*, joignable seulement en IPv6 sur l'offre gratuite,
+  que Docker Desktop sous Windows ne gère pas. Pas le *Transaction pooler*
+  (6543) : Alembic a besoin d'une vraie session.
+
+### 15.6 Remplir `.env`
+`docker-compose.yml` lit chaque valeur Supabase sous la forme
+`${NOM:-valeur locale}` : sans `.env`, rien ne change.
+
+```bash
+cp .env.example .env
+```
+
+Puis remplir `.env` (ignoré par git) :
+
+| Variable | Valeur |
+|---|---|
+| `DATABASE_URL` | Chaîne du Session pooler, `[YOUR-PASSWORD]` remplacé, `?sslmode=require` à la fin |
+| `SUPABASE_URL` | `https://<ref>.supabase.co` |
+| `SUPABASE_JWT_ISSUER` | `https://<ref>.supabase.co/auth/v1` |
+| `VITE_SUPABASE_URL` | `https://<ref>.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` |
+
+> Dans le mot de passe, encoder les caractères spéciaux de l'URL (`@` → `%40`,
+> `:` → `%3A`, `/` → `%2F`, `#` → `%23`). Un `$` doit être doublé (`$$`), sinon
+> Compose le prend pour une variable. Le plus simple : un mot de passe sans ces
+> caractères (Project Settings → Database).
+
+Vérifier ce que Compose va utiliser, **sans afficher le mot de passe ailleurs** :
+
+```bash
+docker compose config | grep -E "SUPABASE|DATABASE_URL"
+```
+
+### 15.7 Reprendre les données (facultatif)
+Sans reprise, le backend crée les tables et le seeder injecte la démo. Pour
+copier la base locale, **avant** le premier démarrage sur le projet hébergé :
+
+```bash
+docker exec supabase_db_chiron pg_dump -U postgres -d postgres --schema=public --no-owner --no-privileges | grep -v "^CREATE SCHEMA public;$" | psql "<chaîne du Session pooler>"
+```
+
+Les **comptes ne sont pas repris** : chacun recrée le sien.
+
+### 15.8 Démarrer et vérifier
+Plus besoin de `supabase start`.
+
+```bash
+docker compose up -d --build -V
+```
+
+1. `docker logs p6_backend` : migration `b7e4c1d2a9f0` appliquée, aucune erreur de connexion.
+2. Créer un compte sur http://localhost:5173/inscription, puis se connecter. Un `401` juste après : revoir §15.2.
+3. Les tables ne sont pas lisibles avec la clé publique (réponse attendue : « permission denied ») :
+
+```bash
+curl -s "https://<ref>.supabase.co/rest/v1/patients?select=*" -H "apikey: sb_publishable_…"
+```
+
+> **Ce qui reste local :** Garage (lames), Orthanc (examens) et InstanSeg.
+> L'équipe partage les comptes et la base, mais une lame importée par l'un
+> reste sur le Garage de sa machine.
