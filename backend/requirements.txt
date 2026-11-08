@@ -19,6 +19,9 @@ numpy==2.0.2
 # nulle part et embarquait tout PyTorch (image de 15 Go).
 httpx==0.28.1
 
+# Vérification des jetons Supabase (signature ES256 via JWKS).
+pyjwt[crypto]==2.10.1
+
 # Migrations de schéma. `create_all` crée les tables absentes mais n'ajoute
 # jamais de colonne à une table existante : sans Alembic, toute évolution
 # casse silencieusement les bases déjà déployées.

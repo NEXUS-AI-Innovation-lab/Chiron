@@ -739,7 +739,11 @@ faut tester `response.ok`. Deux styles de gestion d'erreur à maîtriser.
 > Cette section décrit **l'état réel** du projet, pas un objectif. Elle est
 > revendiquée telle quelle sur la diapositive 13 et dans le README racine.
 
-### 🔒 S1. Aucune authentification
+### 🔒 S1. Aucune authentification — *résolu*
+
+> **Mise à jour : résolu par Supabase Auth** ([16 — Supabase](16-supabase.md)). Comptes, connexion,
+> gardes de route réelles (`RequireAuth`), et jeton exigé par toutes les routes
+> métier du backend. Ce qui suit décrit l'état d'avant.
 
 ```tsx
 // Login.tsx:14 — le mot de passe n'est NI LU NI TRANSMIS
@@ -756,7 +760,10 @@ Les gardes de route ne protègent rien : `/dashboard` est accessible directement
 Le champ mot de passe est `required` (validation HTML) mais **purement
 décoratif**.
 
-### 🔒 S2. La signature des validations est falsifiable
+### 🔒 S2. La signature des validations est falsifiable — *en partie résolu*
+
+> **Mise à jour :** `owner` (extraction) vient désormais du jeton. `validated_by`,
+> `author` et la signature radiologique viennent encore du client.
 
 `validated_by`, `owner`, `author` viennent tous du `localStorage`, sans
 vérification. N'importe qui peut se déclarer n'importe qui.
@@ -769,7 +776,10 @@ Un technicien peut valider l'étape Diagnostic. Le modèle est prêt à recevoir
 distinction (les acteurs sont identifiés diapositive 5), mais rien n'est
 implémenté.
 
-### 🔒 S4. Le seul contrôle d'autorisation est déclaratif
+### 🔒 S4. Le seul contrôle d'autorisation est déclaratif — *résolu*
+
+> **Mise à jour :** `DELETE /extractions/{id}` compare le propriétaire au compte
+> du **jeton** ; `?username=` est ignoré. Ce qui suit décrit l'état d'avant.
 
 ```python
 # services/extractions.py — delete_extraction()
@@ -867,7 +877,7 @@ docker logs p6_image_seeder
 docker logs p6_instanseg
 
 # Base
-docker exec -it p6_postgres psql -U user -d p6_db
+docker exec -it supabase_db_chiron psql -U postgres -d postgres
 docker exec p6_backend sh -c 'cd /app && alembic current'
 
 # Objets dans Garage (S3)

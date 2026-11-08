@@ -1,13 +1,18 @@
-# 03 — Docker : les 8 conteneurs
+# 03 — Docker : les 7 conteneurs (+ Supabase à côté)
 
 Fichier d'orchestration : [`docker-compose.yml`](../docker-compose.yml)
 Réseau unique : `app_network` (driver `bridge`)
-Volumes nommés : `postgres_data`, `garage_meta`, `garage_data`, `orthanc_data`
-(+ `minio_data`, ancien volume conservé pour la migration, voir [15 — Stockage Garage](15-stockage-garage.md))
+Volumes nommés : `garage_meta`, `garage_data`, `orthanc_data`
+(+ `minio_data` et `postgres_data`, anciens volumes conservés pour la migration : voir [15 — Stockage Garage](15-stockage-garage.md) et [16 — Supabase](16-supabase.md))
+
+> **La base de données n'est plus dans ce fichier.** Elle est fournie par
+> Supabase, lancé à part avec `supabase start` **avant** `docker compose up`
+> (voir §1 et [16 — Supabase](16-supabase.md)).
 
 ```bash
+supabase start                   # d'abord : base de données et comptes
 docker compose up -d --build     # tout démarrer
-docker compose ps                # état des 8 conteneurs
+docker compose ps                # état des 7 conteneurs
 docker compose logs -f backend   # suivre un service
 docker compose down              # arrêter (les volumes survivent)
 docker compose down -v           # ⚠️ arrêter ET DÉTRUIRE les données
@@ -18,8 +23,8 @@ docker compose down -v           # ⚠️ arrêter ET DÉTRUIRE les données
 ## Carte des dépendances
 
 ```
-        postgres ◄─────────┐         garage ◄──────────┐       orthanc ◄──┐
-        (données)          │       (lames + extract.)   │       (DICOM)    │
+  Supabase (hors compose)   garage ◄──────────┐       orthanc ◄──┐
+  base + comptes   ◄──────┐       (lames + extract.)   │       (DICOM)    │
                            │     garage_init (1 fois)   │                  │
             ▲              │              ▲             │          ▲       │
             │              │              │             │          │       │
@@ -45,38 +50,34 @@ docker compose down -v           # ⚠️ arrêter ET DÉTRUIRE les données
 
 ---
 
-## 1. `postgres` — la base de données
+## 1. Supabase — la base de données et les comptes (hors compose)
 
-```yaml
-image: postgres:15
-container_name: p6_postgres
-environment:
-  POSTGRES_USER: user
-  POSTGRES_PASSWORD: password
-  POSTGRES_DB: p6_db
-ports: ["5432:5432"]
-volumes: [postgres_data:/var/lib/postgresql/data]
+Le conteneur `postgres` a été retiré en novembre 2026. La base PostgreSQL et
+le service de comptes sont fournis par **Supabase**, lancé avec sa CLI depuis
+la racine du dépôt (configuration : [`supabase/config.toml`](../supabase/config.toml)).
+
+```bash
+supabase start      # avant docker compose up
+supabase status     # adresses et clés
+supabase stop       # arrêter (les données sont conservées)
 ```
 
 | | |
 |---|---|
-| **Rôle** | Stocke les 7 tables métier + `alembic_version`. Seule source de vérité des données structurées. |
-| **Image** | Officielle `postgres:15`, non modifiée. |
-| **Persistance** | Volume nommé `postgres_data`. Survit à `docker compose down`, détruit par `down -v`. |
-| **Qui l'appelle** | `backend` (SQLAlchemy) et `image_seeder` (même code). |
-| **Port exposé** | `5432` sur l'hôte — utile pour brancher DBeaver / pgAdmin. |
+| **Rôle** | Base PostgreSQL 17 (tables métier dans `public`, comptes dans `auth`) et service d'authentification. |
+| **Ports** | `56321` API (auth), `56322` PostgreSQL, `56323` Studio, `56324` Mailpit. |
+| **Qui l'appelle** | `backend` et `image_seeder` (base, via `host.docker.internal:56322`) ; le backend aussi pour la clé publique des jetons ; le navigateur pour se connecter (`127.0.0.1:56321`). |
+| **Persistance** | Volumes `supabase_*_chiron`, gérés par la CLI. `supabase db reset` repart d'une base vide. |
 
 **Diagnostic**
 
 ```bash
-docker exec -it p6_postgres psql -U user -d p6_db -c '\dt'
-docker exec p6_postgres pg_isready -U user
+supabase status
+docker exec -it supabase_db_chiron psql -U postgres -d postgres -c '\dt'
 ```
 
-> ⚠️ Le port `5432` est exposé sur l'hôte. Si vous avez un PostgreSQL local, le
-> démarrage échoue avec `port is already allocated`. Changez le mapping en
-> `"5433:5432"` — le backend, lui, passe par le réseau Docker et n'est pas
-> affecté.
+Tout le détail (sécurité des tables, migration de l'ancienne base,
+dépannage) est dans [16 — Supabase](16-supabase.md).
 
 ---
 
@@ -226,14 +227,16 @@ volumes:
   - ./backend/dzi_data:/app/dzi_data
 ports: ["8002:8002"]
 environment:
-  - DATABASE_URL=postgresql://user:password@p6_postgres:5432/p6_db
+  - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:56322/postgres
+  - SUPABASE_URL=http://host.docker.internal:56321
+  - SUPABASE_JWT_ISSUER=http://127.0.0.1:56321/auth/v1
   - S3_ENDPOINT=http://garage:3900
   - S3_REGION=garage
   - S3_ACCESS_KEY=GK...
   - S3_SECRET_KEY=...
   - S3_BUCKET=biopsie
+extra_hosts: ["host.docker.internal:host-gateway"]
 depends_on:
-  postgres: {condition: service_started}
   garage_init: {condition: service_completed_successfully}
 ```
 
@@ -521,7 +524,7 @@ docker compose up -d --force-recreate image_seeder   # relancer la passe
 | `4242` | orthanc | DICOM natif (DIMSE) | **personne** |
 | `3900` | garage | API S3 | Backend et seeder (interne), client S3 de debug |
 | `3903` | garage | API d'administration | `garage_init` (interne), debug |
-| `5432` | postgres | PostgreSQL | Backend (interne), client SQL |
+| `56321`–`56324` | *(Supabase, hors compose)* | Auth, PostgreSQL, Studio, Mailpit | Navigateur, backend, client SQL |
 | `9091` | *(hors compose)* | **OLGA** — stack séparée | Navigateur |
 
 ---

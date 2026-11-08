@@ -26,6 +26,7 @@ import dicomParser from "dicom-parser";
 import cornerstoneWADOImageLoader from "cornerstone-wado-image-loader";
 import Hammer from "hammerjs";
 import jsPDF from "jspdf";
+import { apiFetch } from "../services/http";
 
 // Initialisation globale
 let isConfigured = false;
@@ -121,7 +122,7 @@ export default function RadiologyViewer({
 
     const loadDataAndDicom = async () => {
       try {
-        const dbRes = await fetch(
+        const dbRes = await apiFetch(
           `http://localhost:8002/radiology/${studyId}/report`,
         );
         const dbData = await dbRes.json();
@@ -275,7 +276,7 @@ export default function RadiologyViewer({
     const doctorSignature = `${finalUser.name} (${finalUser.profession})`;
 
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `http://localhost:8002/radiology/${studyId}/report`,
         {
           method: "POST",
@@ -332,7 +333,7 @@ export default function RadiologyViewer({
       // 3. On sauvegarde ce vide absolu dans la base de données
       const doctorSignature = `${finalUser.name} (${finalUser.profession})`;
 
-      const res = await fetch(
+      const res = await apiFetch(
         `http://localhost:8002/radiology/${studyId}/report`,
         {
           method: "POST",

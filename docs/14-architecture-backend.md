@@ -91,7 +91,9 @@ backend/
 │   ├── biopsies.py                POST upload-biopsy, DELETE /biopsies/{id}
 │   ├── radiology.py               POST upload-radiology, compte-rendu, DELETE
 │   ├── analysis.py                POST /analyze-ai
-│   └── extractions.py             /extract-roi, /annotations/save, /extractions/...
+│   ├── extractions.py             /extract-roi, /annotations/save, /extractions/...
+│   ├── account.py                 GET /me (utilisateur connecté, doc 16)
+│   └── dependencies.py            require_user : exige un jeton Supabase (doc 16)
 │
 ├── services/                      COUCHE MÉTIER — ne connaît pas HTTP
 │   ├── errors.py                  ServiceError et ses sous-classes (404, 409...)
@@ -101,6 +103,7 @@ backend/
 │   ├── analysis.py                Analyse IA : région → PNG → InstanSeg → bilan
 │   ├── extractions.py             Créer / annoter / lister / supprimer une extraction
 │   ├── health.py                  État de la base et d'InstanSeg
+│   ├── auth.py                    Vérification des jetons Supabase, CurrentUser (doc 16)
 │   ├── slide_processing.py        PyVips pur : tuilage DZI, découpe, résolution
 │   └── tile_cleanup.py            Suppression rapide des tuiles (renommer puis effacer)
 │
@@ -190,6 +193,7 @@ définie dans [`services/errors.py`](../backend/services/errors.py) :
 | `Conflict` | 409 | « Ce dossier contient deja une lame » |
 | `UpstreamError` | 502 | Orthanc refuse le fichier ou ne répond pas |
 | `ServiceUnavailable` | 503 | InstanSeg injoignable |
+| `Unauthorized` | 401 | Jeton absent, invalide ou expiré (ajouté avec Supabase, doc 16) |
 | `ServiceError(detail, status_code=500)` | au choix | Erreur imprévue |
 
 Un **seul** gestionnaire, dans [`main.py`](../backend/main.py), les convertit :

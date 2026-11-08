@@ -1,110 +1,131 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from "react";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import LightModeIcon from '@mui/icons-material/LightMode';
-
-import { useTheme } from '../features/theme/themeContext';
-import Logo from '../components/Logo';
+import { useAuth } from "../features/auth/authContext";
+import { authErrorMessage } from "../features/auth/authErrors";
+import { getRememberMe } from "../features/auth/supabaseClient";
+import { AuthIcon } from "../features/auth/components/AuthIcon";
+import { AuthCheckbox, AuthField } from "../features/auth/components/AuthField";
+import { AuthFootnote, AuthHeading, AuthLayout, AuthNotice } from "../features/auth/components/AuthLayout";
 
 /**
- * Écran de connexion.
+ * Écran de connexion, d'après la maquette Figma « 01 · Connexion ».
  *
- * Sobriété volontaire : un seul bloc centré, une seule action possible.
- * Rien ne doit détourner l'attention du champ à remplir.
+ * L'identité est vérifiée par Supabase Auth (e-mail + mot de passe). Écart
+ * assumé avec la maquette : le champ « Identifiant » demande l'adresse
+ * e-mail, qui est l'identifiant des comptes Supabase.
  */
 export default function Login() {
+  const { session, signIn } = useAuth();
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
-  const [username, setUsername] = useState("");
+  const location = useLocation();
 
-  // L'identifiant saisi devient l'identité utilisée dans toute l'application
-  // (auteur des annotations, signature des comptes rendus).
-  const handleLogin = (e: React.FormEvent) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(getRememberMe);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Page demandée avant la redirection vers /login (voir RequireAuth).
+  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? "/dashboard";
+  // Message laissé par l'écran de réinitialisation du mot de passe.
+  const notice = (location.state as { notice?: string } | null)?.notice;
+
+  if (session) return <Navigate to={from} replace />;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
-
-    localStorage.setItem("biopsie_user", username);
-    navigate('/dashboard');
+    setError(null);
+    setSubmitting(true);
+    try {
+      await signIn(email.trim(), password, remember);
+      navigate(from, { replace: true });
+    } catch (cause) {
+      setError(authErrorMessage(cause));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
-      {/* Bascule de thème accessible dès la connexion : le choix est fait une
-          fois pour toutes, avant même d'entrer dans l'application. */}
-      <div className="flex justify-end p-4">
+    <AuthLayout>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+        <AuthHeading title="Connexion" subtitle="Identifiez-vous pour retrouver votre file de travail." />
+
+        {notice && !error && <AuthNotice tone="success">{notice}</AuthNotice>}
+        {error && <AuthNotice tone="danger">{error}</AuthNotice>}
+
+        <AuthField
+          label="Identifiant (adresse e-mail)"
+          icon="user"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="prenom.nom@etablissement.fr"
+          autoComplete="username"
+          required
+          autoFocus
+        />
+
+        <AuthField
+          label="Mot de passe"
+          icon="lock-simple"
+          revealable
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••••"
+          autoComplete="current-password"
+          required
+        />
+
+        <div className="flex items-center gap-2.5">
+          <AuthCheckbox checked={remember} onChange={setRemember}>
+            Se souvenir de moi
+          </AuthCheckbox>
+          <div className="flex-1" />
+          <Link to="/mot-de-passe-oublie" className="text-sm font-bold text-accent-text hover:underline">
+            Mot de passe oublié ?
+          </Link>
+        </div>
+
+        <button
+          type="submit"
+          className="wg-auth-btn wg-auth-btn-primary"
+          disabled={submitting || !email.trim() || !password}
+        >
+          {submitting ? "Connexion…" : "Se connecter"}
+          {!submitting && <AuthIcon name="arrow-right" size={16} />}
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-line" />
+          <span className="text-[13px] text-faint">ou</span>
+          <div className="h-px flex-1 bg-line" />
+        </div>
+
+        {/* Pro Santé Connect n'est pas encore branché : le bouton de la
+            maquette est affiché, mais désactivé et annoncé comme tel, plutôt
+            qu'un bouton qui ne ferait rien. */}
         <button
           type="button"
-          onClick={toggleTheme}
-          className="wg-btn wg-btn-quiet wg-btn-icon"
-          title={theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'}
-          aria-label={theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'}
+          className="wg-auth-btn wg-auth-btn-outline"
+          disabled
+          title="Bientôt disponible"
         >
-          {theme === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+          <AuthIcon name="first-aid" size={18} className="text-accent-text" />
+          Se connecter avec Pro Santé Connect
+          <span className="wg-chip">Bientôt</span>
         </button>
-      </div>
 
-      <div className="flex flex-1 items-start justify-center px-4 pb-16 pt-6 sm:items-center sm:pt-0">
-        <div className="w-full max-w-sm">
-          {/* Marque */}
-          <div className="mb-8 flex items-center justify-center gap-3">
-            {/* Ici le fond est celui de la page : la variante suit le theme. */}
-            <Logo fond={theme === 'dark' ? 'sombre' : 'clair'} hauteur={56} />
-            <div>
-              <div className="text-lg font-semibold tracking-tight text-ink">Chiron.</div>
-              <div className="text-xs text-muted">Plateforme collaborative</div>
-            </div>
-          </div>
+        <p className="text-center text-sm text-muted">
+          Pas encore de compte ?{" "}
+          <Link to="/inscription" className="font-bold text-accent-text hover:underline">
+            Créer un compte
+          </Link>
+        </p>
 
-          <form onSubmit={handleLogin} className="wg-card p-6">
-            <h1 className="wg-h2 mb-1">Connexion</h1>
-            <p className="wg-sub mb-6">
-              Identifiez-vous pour accéder aux dossiers patients.
-            </p>
-
-            <div className="mb-4">
-              <label className="wg-label" htmlFor="login-user">
-                Identifiant médecin
-              </label>
-              <input
-                id="login-user"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="wg-input"
-                placeholder="Dr. Martin"
-                autoComplete="username"
-                required
-              />
-            </div>
-
-            <div className="mb-6">
-              <label className="wg-label" htmlFor="login-password">
-                Mot de passe
-              </label>
-              <input
-                id="login-password"
-                type="password"
-                placeholder="••••••••"
-                autoComplete="current-password"
-                required
-                className="wg-input"
-              />
-            </div>
-
-            <button type="submit" className="wg-btn wg-btn-primary w-full">
-              Se connecter
-            </button>
-          </form>
-
-          {/* Mention honnête : le champ mot de passe n'est pas transmis, aucun
-              service ne vérifie l'identité. Annoncer une certification que le
-              système n'a pas serait trompeur pour un usage médical. */}
-          <p className="mt-4 text-center text-xs text-faint">
-            Environnement de démonstration. Ne déposez aucune donnée de patient réel.
-          </p>
-        </div>
-      </div>
-    </div>
+        <AuthFootnote>Accès réservé aux professionnels de santé de l'établissement.</AuthFootnote>
+      </form>
+    </AuthLayout>
   );
 }

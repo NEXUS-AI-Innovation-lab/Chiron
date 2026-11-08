@@ -389,6 +389,10 @@ Point d'entrée. Le `!` est l'assertion non-null de TypeScript : on affirme que
 
 ---
 
+> **Mise à jour (novembre 2026) :** la connexion passe désormais par Supabase
+> Auth, et les gardes de route sont réelles (`RequireAuth`). Les deux fiches
+> ci-dessous décrivent l'état d'avant. Voir [16 — Supabase](16-supabase.md), §7 et §8.
+
 #### `src/App.tsx` — 25 lignes · le routeur
 
 ```tsx

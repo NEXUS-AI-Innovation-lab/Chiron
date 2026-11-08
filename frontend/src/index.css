@@ -45,6 +45,8 @@
   --wg-nav-ink: #f2f5f8;
   --wg-nav-muted: #9aa8bb;
   --wg-nav-line: rgba(255, 255, 255, 0.12);
+  --wg-nav-raised: #26344a;    /* encart posé sur le chrome sombre (page de connexion) */
+  --wg-nav-soft: #c4cfdc;      /* texte secondaire sur le chrome sombre */
 
   /* Action principale */
   --wg-accent: #10b981;
@@ -52,6 +54,7 @@
   --wg-accent-ink: #ffffff;    /* texte posé SUR le vert plein */
   --wg-accent-soft: #e6f7f0;   /* fond vert très pâle */
   --wg-accent-text: #0a7d58;   /* vert lisible sur fond clair */
+  --wg-on-accent: #06251a;     /* texte foncé sur le vert des grands boutons (maquette de connexion) */
 
   /* États */
   --wg-danger: #c94b4b;
@@ -112,12 +115,15 @@
   --wg-nav-ink: #f2f5f8;
   --wg-nav-muted: #9aa8bb;
   --wg-nav-line: rgba(255, 255, 255, 0.10);
+  --wg-nav-raised: #1e2a3a;
+  --wg-nav-soft: #c4cfdc;
 
   --wg-accent: #10b981;
   --wg-accent-hover: #34d399;
   --wg-accent-ink: #06251a;    /* texte foncé sur vert : meilleur contraste */
   --wg-accent-soft: rgba(16, 185, 129, 0.14);
   --wg-accent-text: #45d8a4;
+  --wg-on-accent: #06251a;
 
   --wg-danger: #d05a5a;
   --wg-danger-hover: #e07070;
@@ -154,12 +160,15 @@
   --color-nav-ink: var(--wg-nav-ink);
   --color-nav-muted: var(--wg-nav-muted);
   --color-nav-line: var(--wg-nav-line);
+  --color-nav-raised: var(--wg-nav-raised);
+  --color-nav-soft: var(--wg-nav-soft);
 
   --color-accent: var(--wg-accent);
   --color-accent-hover: var(--wg-accent-hover);
   --color-accent-ink: var(--wg-accent-ink);
   --color-accent-soft: var(--wg-accent-soft);
   --color-accent-text: var(--wg-accent-text);
+  --color-on-accent: var(--wg-on-accent);
 
   --color-danger: var(--wg-danger);
   --color-danger-hover: var(--wg-danger-hover);
@@ -269,6 +278,98 @@ ul::-webkit-scrollbar-track,
    -------------------------------------------------------------------------- */
 
 @layer components {
+
+/* --- Écrans d'authentification (connexion, création de compte) ---
+   D'après la maquette Figma « 01 · Connexion » : champs hauts (50 px), très
+   arrondis, icône à gauche ; boutons en pilule de 52 px. Ces écrans sont les
+   seuls à utiliser ce gabarit, plus aéré que celui de l'application. */
+.wg-auth-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wg-ink);
+  margin-bottom: 7px;
+}
+.wg-auth-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  padding: 0 16px;
+  background: var(--wg-surface);
+  border: 1px solid var(--wg-line-strong);
+  border-radius: 12px;
+  color: var(--wg-muted);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+/* Focus : bordure verte épaisse et halo, comme le champ actif de la maquette.
+   La bordure passe à 2 px ; le padding perd 1 px pour que le texte ne bouge pas. */
+.wg-auth-field:focus-within {
+  border: 2px solid var(--wg-accent);
+  padding: 0 15px;
+  box-shadow: 0 0 0 4px var(--wg-accent-soft);
+}
+.wg-auth-field[data-invalid="true"] {
+  border-color: var(--wg-danger);
+}
+.wg-auth-field input,
+.wg-auth-field select {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  color: var(--wg-ink);
+}
+.wg-auth-field input::placeholder {
+  color: var(--wg-faint);
+}
+.wg-auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+.wg-auth-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.wg-auth-btn-primary {
+  background: var(--wg-accent);
+  color: var(--wg-on-accent);
+  border: 0;
+}
+.wg-auth-btn-primary:hover:not(:disabled) {
+  background: var(--wg-accent-hover);
+}
+.wg-auth-btn-outline {
+  background: var(--wg-surface);
+  color: var(--wg-ink);
+  border: 1.5px solid var(--wg-line);
+}
+.wg-auth-btn-outline:hover:not(:disabled) {
+  background: var(--wg-raised);
+}
+/* Icône de la maquette affichée en masque : le fichier SVG est utilisé tel
+   quel, mais sa couleur vient du jeton (currentColor), donc du thème. */
+.wg-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask: var(--wg-icon-src) center / contain no-repeat;
+  mask: var(--wg-icon-src) center / contain no-repeat;
+}
 
 /* --- Carte --- */
 .wg-card {

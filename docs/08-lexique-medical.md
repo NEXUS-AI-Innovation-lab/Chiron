@@ -220,7 +220,7 @@ Par extension dans Chiron : la lame numérisée issue de ce prélèvement.
 | Route | `POST /patients/{id}/upload-biopsy`, `DELETE /biopsies/{id}` |
 | Interface | Bouton « Biopsie » sur la carte patient ; onglet « Biopsie WSI » |
 | Dossier | `backend/images_initiales/biopsie/` |
-| Clé localStorage | **`biopsie_user`** — l'identité de l'utilisateur |
+| Clé localStorage | **`biopsie_user`** — nom de l'utilisateur, recopié depuis son compte Supabase par `AuthProvider` |
 
 **Type de prélèvement** — valeurs de l'énumération `prelevementType` :
 

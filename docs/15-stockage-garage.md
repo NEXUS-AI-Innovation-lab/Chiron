@@ -269,8 +269,15 @@ le passage à Garage :
   et répondent **404 « Lame source introuvable »** tant qu'elle n'y a pas été
   copiée.
 
-Les lames de démonstration n'ont pas besoin d'être migrées : le seeder les
-renvoie dans Garage au premier démarrage.
+Les lames de démonstration n'ont pas besoin d'être migrées : à **chaque**
+démarrage, le seeder renvoie dans Garage celles de `images_initiales/` qui y
+manquent, même si la base est déjà peuplée.
+
+> Constaté sur un volume réel : un ancien MinIO peut ne plus reconnaître son
+> propre bucket (`NoSuchBucket`, aucune liste de buckets), alors que les
+> fichiers sont bien sur le disque. Le script de migration ne peut alors rien
+> copier. Si le volume ne contenait que la lame de démonstration, le seeder
+> suffit.
 
 Le script [`backend/migrate_minio_to_garage.py`](../backend/migrate_minio_to_garage.py)
 copie tous les objets de l'ancien bucket vers Garage. Procédure, depuis la

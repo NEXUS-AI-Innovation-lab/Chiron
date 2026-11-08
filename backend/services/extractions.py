@@ -206,8 +206,9 @@ def get_details(db: Session, extraction_id: int) -> dict:
 def delete_extraction(db: Session, extraction_id: int, username: str) -> dict:
     """Supprime une extraction si `username` en est le propriétaire.
 
-    Le contrôle est déclaratif (sécurité S4) : n'importe qui peut envoyer le
-    bon nom d'utilisateur tant qu'il n'y a pas d'authentification.
+    `username` est le nom de l'utilisateur CONNECTÉ, lu dans son jeton
+    Supabase par le routeur (sécurité S4 corrigée) : le client ne le choisit
+    plus.
     """
     ext = _get_extraction(db, extraction_id, "Not Found")
     if ext.owner != username:

@@ -2,7 +2,15 @@
 
 **Base URL :** `http://localhost:8002`
 **Documentation interactive :** http://localhost:8002/docs (Swagger) et `/redoc`
-**Authentification :** aucune. Aucun en-tête n'est requis, aucun n'est vérifié.
+**Authentification :** jeton de session **Supabase**, obligatoire sur toutes
+les routes sauf `/health` et les tuiles `/dzi_data` :
+`Authorization: Bearer <access_token>`. Sans jeton valide : `401`
+`{"detail": "Authentification requise."}`. Route `GET /me` : identité de
+l'utilisateur connecté. Détail : [16 — Supabase](16-supabase.md), §6.
+
+> Dans `/docs`, le bouton **Authorize** accepte un jeton. Pour en obtenir un
+> sans l'interface : `POST http://127.0.0.1:56321/auth/v1/token?grant_type=password`
+> avec l'en-tête `apikey` (clé publishable) et `{"email", "password"}`.
 
 > **Décompte réel : 20 routes backend** + 1 point de montage statique.
 > (La présentation annonce 18 — le décompte du code fait foi.)

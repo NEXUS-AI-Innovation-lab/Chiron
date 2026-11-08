@@ -1,17 +1,24 @@
 # 02 — Base de données
 
-**SGBD :** PostgreSQL 15 (conteneur `p6_postgres`, port `5432`)
+**SGBD :** PostgreSQL 17 fourni par **Supabase** (`supabase start`, port `56322`). Voir [16 — Supabase](16-supabase.md).
 **ORM :** SQLAlchemy 2.0.49 — modèles dans [`backend/models.py`](../backend/models.py)
 **Migrations :** Alembic 1.16.5 — [`backend/alembic/`](../backend/alembic/)
 **Connexion :** [`backend/database.py`](../backend/database.py)
 
-| Paramètre | Valeur (docker-compose) |
+| Paramètre | Valeur (Supabase local) |
 |---|---|
-| Base | `p6_db` |
-| Utilisateur | `user` |
-| Mot de passe | `password` |
-| URL complète | `postgresql://user:password@p6_postgres:5432/p6_db` |
-| Volume | `postgres_data:/var/lib/postgresql/data` |
+| Base | `postgres` |
+| Utilisateur | `postgres` |
+| Mot de passe | `postgres` |
+| URL depuis un conteneur | `postgresql://postgres:postgres@host.docker.internal:56322/postgres` |
+| URL depuis l'hôte | `postgresql://postgres:postgres@127.0.0.1:56322/postgres` |
+| Volume | `supabase_db_chiron` (géré par la CLI Supabase) |
+
+> Jusqu'en novembre 2026, la base était un conteneur `p6_postgres`
+> (`postgresql://user:password@p6_postgres:5432/p6_db`). Migration des données :
+> [16 — Supabase](16-supabase.md), §10. Les comptes utilisateurs vivent dans le schéma `auth` de
+> Supabase ; les tables métier restent dans `public`, gérées par Alembic, avec
+> RLS activé (migration `b7e4c1d2a9f0`).
 
 ---
 
@@ -477,7 +484,7 @@ L'unique révision actuelle est
 
 ```bash
 # Ouvrir un psql
-docker exec -it p6_postgres psql -U user -d p6_db
+docker exec -it supabase_db_chiron psql -U postgres -d postgres
 ```
 
 ```sql
