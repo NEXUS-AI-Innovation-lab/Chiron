@@ -15,7 +15,7 @@ Pour savoir où se trouve quoi : docs/14-architecture-backend.md.
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,7 +23,8 @@ from fastapi.staticfiles import StaticFiles
 import config
 from clients.instanseg import instanseg_client
 from migrations import apply_migrations_safely
-from routers import analysis, biopsies, extractions, health, patients, radiology
+from routers import account, analysis, biopsies, extractions, health, patients, radiology
+from routers.dependencies import require_user
 from services.errors import ServiceError
 from workflow.router import router as workflow_router
 
@@ -54,17 +55,26 @@ app.add_middleware(
 @app.exception_handler(ServiceError)
 async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
     """Une erreur métier devient une réponse `{"detail": ...}`, comme une HTTPException."""
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers
+    )
 
 
 # Tuiles DZI générées par l'import des lames, lues par OpenSeadragon.
 os.makedirs(config.DZI_FOLDER, exist_ok=True)
 app.mount("/dzi_data", StaticFiles(directory=config.DZI_FOLDER), name="dzi_data")
 
+# Publique : la supervision doit répondre même sans session.
 app.include_router(health.router)
-app.include_router(patients.router)
-app.include_router(biopsies.router)
-app.include_router(radiology.router)
-app.include_router(analysis.router)
-app.include_router(extractions.router)
-app.include_router(workflow_router)
+
+# Toutes les routes métier exigent un utilisateur connecté (jeton Supabase).
+# Les tuiles /dzi_data restent publiques : OpenSeadragon les charge sans
+# pouvoir y joindre d'en-tête (limite connue, docs/16-supabase.md).
+_connecte = [Depends(require_user)]
+app.include_router(account.router)  # protège elle-même sa route /me
+app.include_router(patients.router, dependencies=_connecte)
+app.include_router(biopsies.router, dependencies=_connecte)
+app.include_router(radiology.router, dependencies=_connecte)
+app.include_router(analysis.router, dependencies=_connecte)
+app.include_router(extractions.router, dependencies=_connecte)
+app.include_router(workflow_router, dependencies=_connecte)

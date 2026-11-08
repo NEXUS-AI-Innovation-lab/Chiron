@@ -32,6 +32,22 @@ S3_SECRET_KEY = os.getenv(
 )
 S3_BUCKET = os.getenv("S3_BUCKET", "biopsie")
 
+# --- Supabase Auth (comptes utilisateurs) ------------------------------------
+# Le backend ne gère aucun mot de passe : il vérifie seulement la signature
+# des jetons émis par Supabase, avec la clé publique publiée sur JWKS_URL.
+#
+# Deux adresses différentes, car vues de deux endroits :
+# * SUPABASE_URL : comment le CONTENEUR backend joint Supabase
+#   (host.docker.internal, Supabase tournant à côté de la pile Compose) ;
+# * SUPABASE_JWT_ISSUER : l'émetteur inscrit DANS le jeton, c'est-à-dire
+#   l'adresse que voit le NAVIGATEUR.
+SUPABASE_URL = os.getenv("SUPABASE_URL", "http://host.docker.internal:56321").rstrip("/")
+SUPABASE_JWKS_URL = os.getenv(
+    "SUPABASE_JWKS_URL", f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+)
+SUPABASE_JWT_ISSUER = os.getenv("SUPABASE_JWT_ISSUER", "http://127.0.0.1:56321/auth/v1")
+SUPABASE_JWT_AUDIENCE = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+
 # --- Orthanc (PACS radiologie) ----------------------------------------------
 ORTHANC_URL = os.getenv("ORTHANC_URL", "http://orthanc:8042")
 ORTHANC_USER = os.getenv("ORTHANC_USER", "orthanc")

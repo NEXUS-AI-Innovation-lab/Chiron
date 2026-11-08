@@ -13,6 +13,8 @@ class ServiceError(Exception):
     """Erreur métier générique. `status_code` est le code HTTP correspondant."""
 
     status_code = 500
+    #: En-têtes HTTP à ajouter à la réponse (ex. WWW-Authenticate pour un 401).
+    headers: Optional[dict] = None
 
     def __init__(self, detail: Any, status_code: Optional[int] = None):
         super().__init__(detail)
@@ -25,6 +27,13 @@ class InvalidInput(ServiceError):
     """Donnée refusée (format de fichier, champ manquant...)."""
 
     status_code = 400
+
+
+class Unauthorized(ServiceError):
+    """Jeton absent, invalide ou expiré : l'utilisateur doit se (re)connecter."""
+
+    status_code = 401
+    headers = {"WWW-Authenticate": "Bearer"}
 
 
 class Forbidden(ServiceError):
