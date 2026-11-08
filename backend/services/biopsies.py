@@ -1,4 +1,4 @@
-"""Lames de biopsie : import (MinIO + tuilage DZI), récupération, suppression."""
+"""Lames de biopsie : import (stockage S3 + tuilage DZI), récupération, suppression."""
 
 import tempfile
 import uuid
@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 import config
 import models
 import storage
-from clients.object_storage import BUCKET_NAME, ensure_bucket, minio_client
+from clients.object_storage import ensure_bucket, object_storage
 from services import slide_processing, tile_cleanup
 from services.errors import Conflict, InvalidInput, NotFound, ServiceError
 from services.patients import get_patient, safe_folder_name
@@ -21,7 +21,7 @@ SLIDE_EXTENSIONS = {".svs", ".tif", ".tiff"}
 
 
 async def import_biopsy(db: Session, patient_id: int, file: UploadFile) -> models.Biopsy:
-    """Importe une lame : copie temporaire, envoi dans MinIO, tuilage DZI, ligne en base.
+    """Importe une lame : copie temporaire, envoi dans le stockage S3, tuilage DZI, ligne en base.
 
     Un dossier ne porte qu'une lame : tout le reste de l'application
     travaille sur `patient.biopsies[0]`. Accepter la seconde donnait
@@ -55,13 +55,11 @@ async def import_biopsy(db: Session, patient_id: int, file: UploadFile) -> model
             while chunk := await file.read(8 * 1024 * 1024):
                 temporary.write(chunk)
 
-        ensure_bucket()
-        minio_object_name = f"{folder_id}/{source_name}"
         # Hors boucle d'événements : l'envoi d'une lame de plusieurs centaines
         # de mégaoctets gelait l'API entière.
-        await run_in_threadpool(
-            minio_client.fput_object, BUCKET_NAME, minio_object_name, str(source_path)
-        )
+        await run_in_threadpool(ensure_bucket)
+        object_key = f"{folder_id}/{source_name}"
+        await run_in_threadpool(object_storage.upload_file, object_key, str(source_path))
 
         # Étape la plus longue (plusieurs minutes), purement synchrone.
         await run_in_threadpool(
@@ -89,9 +87,9 @@ async def import_biopsy(db: Session, patient_id: int, file: UploadFile) -> model
 
 
 def download_biopsy_source(patient: models.Patient, prefix: str = "chiron") -> Path:
-    """Télécharge la lame source d'un patient depuis MinIO vers un fichier temporaire.
+    """Télécharge la lame source d'un patient depuis le stockage S3 vers un fichier temporaire.
 
-    Le nom de l'objet MinIO ne correspond pas toujours au DZI affiché (voir
+    Le nom de l'objet stocké ne correspond pas toujours au DZI affiché (voir
     `storage.py`) : on essaie les emplacements du plus précis au plus large,
     et on lève une `NotFound` explicite listant ce qui a été cherché.
 
@@ -101,26 +99,26 @@ def download_biopsy_source(patient: models.Patient, prefix: str = "chiron") -> P
         raise NotFound("Aucune biopsie disponible pour ce patient")
 
     candidates = storage.candidate_object_keys(
-        minio_client, BUCKET_NAME, patient.folder_id, patient.biopsies[0].image_url
+        object_storage, patient.folder_id, patient.biopsies[0].image_url
     )
 
     for key in candidates:
         target = Path(tempfile.gettempdir()) / f"{prefix}-{uuid.uuid4().hex}{Path(key).suffix}"
         try:
-            minio_client.fget_object(BUCKET_NAME, key, str(target))
+            object_storage.download_file(key, str(target))
             return target
         except Exception:
             if target.exists():
                 target.unlink()
 
     raise NotFound(
-        "Lame source introuvable dans MinIO pour ce patient. "
+        "Lame source introuvable dans le stockage S3 pour ce patient. "
         f"Emplacements essayes : {', '.join(candidates[:6])}."
     )
 
 
 def delete_biopsy(db: Session, biopsy_id: int) -> Tuple[dict, List[Path]]:
-    """Supprime une lame : objet MinIO, tuiles DZI, puis la ligne.
+    """Supprime une lame : objet S3, tuiles DZI, puis la ligne.
 
     Les extractions déjà réalisées sur cette lame sont conservées : elles
     portent leur propre fichier et leur propre compte rendu. Le rapport
@@ -139,15 +137,14 @@ def delete_biopsy(db: Session, biopsy_id: int) -> Tuple[dict, List[Path]]:
 
     if patient:
         rapport["extractions_conservees"] = len(patient.extractions)
-        cle = storage.find_object_key(
-            minio_client, BUCKET_NAME, patient.folder_id, biopsy.image_url
-        )
+        cle = storage.find_object_key(object_storage, patient.folder_id, biopsy.image_url)
         if cle:
             try:
-                minio_client.remove_object(BUCKET_NAME, cle)
+                object_storage.delete(cle)
+                # Clé de réponse conservée telle quelle : le frontend la lit.
                 rapport["minio_objects"] += 1
             except Exception as error:
-                rapport["warnings"].append(f"MinIO {cle} : {error}")
+                rapport["warnings"].append(f"Stockage S3 {cle} : {error}")
 
     differes: List[Path] = []
     tile_cleanup.supprimer_tuiles(biopsy.image_url, rapport, differes)

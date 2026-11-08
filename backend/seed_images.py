@@ -4,7 +4,7 @@ Ce script tourne au démarrage de la pile (service `image_seeder`). Il fait
 désormais le même travail que les routes d'upload de l'application, au lieu
 de simplement déposer des fichiers :
 
-* la lame est rangée sous ``{folder_id}/`` dans MinIO — la disposition que
+* la lame est rangée sous ``{folder_id}/`` dans le stockage S3 — la disposition que
   le backend interroge, et non plus la racine du bucket ;
 * les tuiles DZI sont générées, donc la lame est visible dans le viewer ;
 * les lignes ``Patient`` / ``Biopsy`` / ``RadiologyStudy`` sont créées, sans
@@ -24,18 +24,16 @@ from pathlib import Path
 
 import pyvips
 import requests
-from minio import Minio
 
 import database
 import models
 import storage
+from clients.object_storage import ObjectStorage, object_storage
 
 ORTHANC_BASE = os.getenv("ORTHANC_URL", "http://orthanc:8042")
 ORTHANC_AUTH = (os.getenv("ORTHANC_USER", "orthanc"), os.getenv("ORTHANC_PASSWORD", "orthanc"))
-MINIO_URL = os.getenv("MINIO_HOST", "minio:9000")
-MINIO_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-BUCKET_NAME = "biopsie"
+# Le stockage S3 (Garage) est configuré dans config.py, comme pour l'API :
+# même endpoint, mêmes clés, même bucket.
 
 BASE_DIR = Path(os.getenv("SEED_BASE_DIR", "/app/images_initiales"))
 RADIO_DIR = BASE_DIR / "radiologie"
@@ -81,8 +79,8 @@ def get_or_create_patient(db, folder_id: str, name: str) -> models.Patient:
     return patient
 
 
-def seed_slide(db, minio_client: Minio, path: Path) -> None:
-    """Injecte une lame : MinIO, tuiles DZI, puis lignes en base."""
+def seed_slide(db, store: ObjectStorage, path: Path) -> None:
+    """Injecte une lame : stockage S3, tuiles DZI, puis lignes en base."""
     folder_id = path.stem
     object_key = f"{folder_id}/{path.name}"
     dzi_relative = f"{folder_id}/{path.stem}.dzi"
@@ -100,11 +98,9 @@ def seed_slide(db, minio_client: Minio, path: Path) -> None:
         .first()
     )
 
-    try:
-        minio_client.stat_object(BUCKET_NAME, object_key)
-    except Exception:
-        print(f"[>] envoi MinIO : {object_key}")
-        minio_client.fput_object(BUCKET_NAME, object_key, str(path))
+    if not store.exists(object_key):
+        print(f"[>] envoi S3 : {object_key}")
+        store.upload_file(object_key, str(path))
 
     dzi_path = DZI_FOLDER / dzi_relative
     if not dzi_path.exists():
@@ -197,7 +193,7 @@ def generer_tuiles(source: Path, destination: Path) -> None:
     image.dzsave(str(destination.with_suffix("")), tile_size=256, overlap=1, suffix=".jpg")
 
 
-def reconcilier_tuiles(db, minio_client: Minio) -> int:
+def reconcilier_tuiles(db, store: ObjectStorage) -> int:
     """Regenere les tuiles manquantes des biopsies deja enregistrees.
 
     Cette passe s'execute a CHAQUE demarrage, meme sur une base peuplee.
@@ -206,7 +202,7 @@ def reconcilier_tuiles(db, minio_client: Minio) -> int:
     aucune tuile : le viewer afficherait un ecran vide, et l'utilisateur
     devrait lancer une conversion a la main.
 
-    La lame source est rapatriee depuis MinIO uniquement si les tuiles
+    La lame source est rapatriee depuis le stockage S3 uniquement si les tuiles
     manquent reellement : le cas courant ne coute qu'un acces disque.
     """
     regenerees = 0
@@ -228,18 +224,16 @@ def reconcilier_tuiles(db, minio_client: Minio) -> int:
             print(f"[!] biopsie {biopsie.id} sans patient : ignoree")
             continue
 
-        cle = storage.find_object_key(
-            minio_client, BUCKET_NAME, patient.folder_id, biopsie.image_url
-        )
+        cle = storage.find_object_key(store, patient.folder_id, biopsie.image_url)
         if not cle:
             print(f"[!] tuiles absentes pour {biopsie.image_url} et lame source "
-                  f"introuvable dans MinIO : regeneration impossible")
+                  f"introuvable dans le stockage S3 : regeneration impossible")
             continue
 
         temporaire = Path(tempfile.gettempdir()) / f"chiron-seed-{uuid.uuid4().hex}{Path(cle).suffix}"
         try:
             print(f"[>] tuiles manquantes pour {biopsie.image_url} — regeneration depuis {cle}")
-            minio_client.fget_object(BUCKET_NAME, cle, str(temporaire))
+            store.download_file(cle, str(temporaire))
             generer_tuiles(temporaire, dzi)
             regenerees += 1
             print(f"[+] tuiles regenerees : {biopsie.image_url}")
@@ -253,12 +247,12 @@ def reconcilier_tuiles(db, minio_client: Minio) -> int:
 
 
 def main() -> None:
-    minio_client = Minio(MINIO_URL, access_key=MINIO_KEY, secret_key=MINIO_SECRET, secure=False)
+    store = object_storage
 
     ready = all(
         [
             wait_for("PostgreSQL", lambda: database.engine.connect().close()),
-            wait_for("MinIO", lambda: minio_client.list_buckets()),
+            wait_for("Stockage S3 (Garage)", store.ping),
             wait_for(
                 "Orthanc",
                 lambda: requests.get(
@@ -271,9 +265,8 @@ def main() -> None:
         print("Injection abandonnee : un service requis est indisponible.")
         return
 
-    if not minio_client.bucket_exists(BUCKET_NAME):
-        minio_client.make_bucket(BUCKET_NAME)
-        print(f"[+] bucket '{BUCKET_NAME}' cree")
+    # Normalement deja cree par garage/init_garage.py : filet de securite.
+    store.ensure_bucket()
 
     db = database.SessionLocal()
     try:
@@ -283,7 +276,7 @@ def main() -> None:
         # Passe systematique : les tuiles sont un artefact regenerable, elles
         # ne sont pas versionnees. On les reconstruit avant toute autre chose.
         print("\n--- VERIFICATION DES TUILES ---")
-        regenerees = reconcilier_tuiles(db, minio_client)
+        regenerees = reconcilier_tuiles(db, store)
         print(f"[=] {regenerees} pyramide(s) DZI regeneree(s)")
 
         existing = db.query(models.Patient).count()
@@ -296,7 +289,7 @@ def main() -> None:
             for path in sorted(BIOPSIE_DIR.iterdir()):
                 if path.is_file() and path.suffix.lower() in SLIDE_EXTENSIONS:
                     try:
-                        seed_slide(db, minio_client, path)
+                        seed_slide(db, store, path)
                     except Exception as error:
                         db.rollback()
                         print(f"[echec] {path.name} : {error}")

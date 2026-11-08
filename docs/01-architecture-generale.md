@@ -25,7 +25,7 @@
       │        │         │
       ▼        ▼         ▼
   ┌────────┐ ┌───────┐ ┌───────────┐   ┌──────────────────┐
-  │Postgres│ │ MinIO │ │ dzi_data/ │   │ InstanSeg :7000  │
+  │Postgres│ │Garage │ │ dzi_data/ │   │ InstanSeg :7000  │
   │ :5432  │ │ :9000 │ │  (disque) │   │ PyTorch, CPU     │
   └────────┘ └───────┘ └───────────┘   └──────────────────┘
        ▲          ▲          ▲                   ▲
@@ -42,7 +42,7 @@ donc deux chaînes techniques complètes, réunies par un seul dossier patient.
 |---|---|---|
 | Format source | `.dcm` (DICOM) | `.svs`, `.tif`, `.tiff` (WSI) |
 | Taille typique | quelques Mo | **100 Mo à plusieurs Go** |
-| Stockage | **Orthanc** (PACS, indexe par UID) | **MinIO** (stockage objet S3) |
+| Stockage | **Orthanc** (PACS, indexe par UID) | **Garage** (stockage objet S3, voir [15 — Stockage Garage](15-stockage-garage.md)) |
 | Transformation | aucune | **pyramide de tuiles DZI** (PyVips) |
 | Service au navigateur | protocole **WADO-URI** via proxy Vite | fichiers statiques `/dzi_data` |
 | Visionneuse | **Cornerstone.js** | **OpenSeadragon** |
@@ -108,7 +108,7 @@ avant de toucher au code. Tout est détaillé dans
 | **HTTP** | [`routers/`](../backend/routers/) | Une route = quelques lignes qui appellent un service. |
 | **Métier** | [`services/`](../backend/services/) | Règles, orchestration, base de données. Ne connaît pas HTTP. |
 | **Contrats** | [`schemas/`](../backend/schemas/) | Modèles Pydantic d'entrée et de sortie. |
-| **Externes** | [`clients/`](../backend/clients/) | MinIO, Orthanc, InstanSeg. |
+| **Externes** | [`clients/`](../backend/clients/) | Stockage S3 (Garage, boto3), Orthanc, InstanSeg. |
 | **Workflow** | [`workflow/`](../backend/workflow/) | Même découpage, en un package autonome : `router.py` / `service.py` / `schemas.py` / `constants.py`. |
 
 Jusqu'à novembre 2026, tout sauf le workflow tenait dans un seul `main.py` de
@@ -253,7 +253,7 @@ workflow pour les extractions créées avant l'existence du moteur — voir
 
 2. FastAPI  analyze_image_with_ai()                  [services/analysis.py]
    ├─ résout le patient par folder_id
-   ├─ download_biopsy_source()  ── MinIO ──▶ fichier temporaire
+   ├─ download_biopsy_source()  ── Garage ──▶ fichier temporaire
    │     essaie plusieurs emplacements (storage.candidate_object_keys)
    ├─ run_in_threadpool(_borner_region)   ← PyVips, hors boucle d'événements
    ├─ REFUSE de nouveau si > 1500 × 1500 px  (garde-fou serveur)
@@ -296,7 +296,7 @@ Viewer.tsx
 ```
 
 **Le fichier TIFF pyramidal produit par `/extract-roi` n'est jamais affiché.**
-Il est généré, poussé dans MinIO, puis effacé du disque
+Il est généré, poussé dans Garage, puis effacé du disque
 (`create_from_region()` dans [services/extractions.py](../backend/services/extractions.py)). Le champ `url` renvoyé par
 `GET /patients/{folder_id}/extractions` pointe vers `/dzi_data/...` où plus
 aucun fichier n'existe — il est simplement inutilisé par le frontend. Voir
@@ -313,7 +313,7 @@ aucun fichier n'existe — il est simplement inutilisé par le frontend. Voir
 | Navigateur | Orthanc | `/orthanc/...` | **proxy Vite** → `http://p6_orthanc:8042` |
 | Navigateur | Tuiles DZI | `http://localhost:8002/dzi_data/...` | l'OS de l'hôte |
 | Backend | Postgres | `p6_postgres:5432` | DNS Docker |
-| Backend | MinIO | `minio:9000` | alias réseau Docker |
+| Backend | Garage (S3) | `http://garage:3900` | nom du service Docker |
 | Backend | Orthanc | `orthanc:8042` | DNS Docker |
 | Backend | InstanSeg | `instanseg:7000` | DNS Docker |
 
@@ -337,7 +337,7 @@ Le **proxy Vite** vers Orthanc existe pour deux raisons : contourner le CORS, et
 | Le workflow occupe 2 tables dédiées | JSONB par étape : un champ ajouté côté OLGA est conservé même sans colonne | [models.py:108-176](../backend/models.py#L108-L176) |
 | InstanSeg est un service séparé | Évite d'embarquer PyTorch dans l'API métier — image backend 15 Go → 1,7 Go | [`instanseg/`](../instanseg/) + [requirements.txt:14-17](../backend/requirements.txt#L14-L17) |
 | Alembic remplace `create_all` | `create_all` crée les tables absentes mais **n'ajoute jamais de colonne** | [migrations.py](../backend/migrations.py) |
-| Le travail lourd passe par `run_in_threadpool` | PyVips et MinIO sont synchrones : sur la boucle d'événements ils gelaient toute l'API | [services/biopsies.py](../backend/services/biopsies.py), [services/analysis.py](../backend/services/analysis.py) |
+| Le travail lourd passe par `run_in_threadpool` | PyVips et boto3 (S3) sont synchrones : sur la boucle d'événements ils gelaient toute l'API | [services/biopsies.py](../backend/services/biopsies.py), [services/analysis.py](../backend/services/analysis.py) |
 | Suppression de tuiles : renommer puis effacer en tâche de fond | Un dossier de tuiles = des dizaines de milliers de fichiers ; l'effacer prend ~1 min | [services/tile_cleanup.py](../backend/services/tile_cleanup.py) |
 | Confirmations par modale applicative, pas `window.confirm` | Le dialogue natif est désactivable par l'utilisateur → suppressions silencieusement inopérantes | [PatientCard.tsx:152-170](../frontend/src/components/PatientCard.tsx#L152-L170) |
 

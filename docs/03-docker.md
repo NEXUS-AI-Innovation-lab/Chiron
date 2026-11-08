@@ -1,12 +1,13 @@
-# 03 — Docker : les 7 conteneurs
+# 03 — Docker : les 8 conteneurs
 
 Fichier d'orchestration : [`docker-compose.yml`](../docker-compose.yml)
 Réseau unique : `app_network` (driver `bridge`)
-Volumes nommés : `postgres_data`, `minio_data`, `orthanc_data`
+Volumes nommés : `postgres_data`, `garage_meta`, `garage_data`, `orthanc_data`
+(+ `minio_data`, ancien volume conservé pour la migration, voir [15 — Stockage Garage](15-stockage-garage.md))
 
 ```bash
 docker compose up -d --build     # tout démarrer
-docker compose ps                # état des 7 conteneurs
+docker compose ps                # état des 8 conteneurs
 docker compose logs -f backend   # suivre un service
 docker compose down              # arrêter (les volumes survivent)
 docker compose down -v           # ⚠️ arrêter ET DÉTRUIRE les données
@@ -17,8 +18,9 @@ docker compose down -v           # ⚠️ arrêter ET DÉTRUIRE les données
 ## Carte des dépendances
 
 ```
-        postgres ◄─────────┐          minio ◄──────────┐       orthanc ◄──┐
+        postgres ◄─────────┐         garage ◄──────────┐       orthanc ◄──┐
         (données)          │       (lames + extract.)   │       (DICOM)    │
+                           │     garage_init (1 fois)   │                  │
             ▲              │              ▲             │          ▲       │
             │              │              │             │          │       │
             └──── backend ─┴──────────────┘             │          │       │
@@ -29,13 +31,17 @@ docker compose down -v           # ⚠️ arrêter ET DÉTRUIRE les données
      (navigateur)                                                   │       │
                                                                     │       │
         image_seeder ───────────────────────────────────────────────┴───────┘
-        (one-shot au démarrage : dépend de backend, orthanc, minio)
+        (one-shot au démarrage : dépend de backend, orthanc, garage_init)
 ```
 
 > `depends_on` en Compose v2 **sans `condition`** ne fait qu'ordonner le
 > *démarrage* des conteneurs — il n'attend pas qu'un service soit *prêt*. C'est
 > pourquoi `seed_images.py` implémente sa propre boucle d'attente
 > (`wait_for`, 60 tentatives × 2 s). Voir §7.
+>
+> Exception : `backend` et `image_seeder` attendent que `garage_init` se soit
+> **terminé avec succès** (`condition: service_completed_successfully`), car
+> sans clé ni bucket, Garage refuse toute requête.
 
 ---
 
@@ -74,34 +80,41 @@ docker exec p6_postgres pg_isready -U user
 
 ---
 
-## 2. `minio` — le stockage objet des lames
+## 2. `garage` — le stockage objet des lames
+
+> Garage remplace MinIO depuis novembre 2026. Tout le détail (initialisation,
+> client boto3, migration des anciennes données, dépannage) est dans
+> [15 — Stockage Garage](15-stockage-garage.md).
 
 ```yaml
-image: minio/minio
-container_name: p6_minio
-hostname: minio
-ports: ["9000:9000", "9001:9001"]
-environment:
-  MINIO_ROOT_USER: minioadmin
-  MINIO_ROOT_PASSWORD: minioadmin
-volumes: [minio_data:/data]
-command: server /data --console-address ":9001"
-networks:
-  app_network:
-    aliases: [minio]
+garage:
+  image: dxflrs/garage:v2.5.0
+  container_name: p6_garage
+  ports: ["3900:3900", "3903:3903"]
+  environment:
+    GARAGE_RPC_SECRET: ...
+    GARAGE_ADMIN_TOKEN: ...
+  volumes:
+    - ./garage/garage.toml:/etc/garage.toml:ro
+    - garage_meta:/var/lib/garage/meta
+    - garage_data:/var/lib/garage/data
+
+garage_init:                       # s'exécute une fois puis s'arrête
+  image: python:3.12-alpine
+  command: python /garage/init_garage.py
+  depends_on: [garage]
 ```
 
 | | |
 |---|---|
 | **Rôle** | Conserve **intactes** les lames sources (`.svs`, `.tif`) et les extractions TIFF pyramidales. Compatible S3. |
-| **Bucket** | `biopsie` — créé à la volée par `ensure_minio_bucket()` ou par le seeder. |
-| **Port 9000** | API S3 (celle qu'utilise le backend). |
-| **Port 9001** | Console web — http://localhost:9001, `minioadmin`/`minioadmin`. |
-| **Persistance** | Volume `minio_data`. |
-
-**Pourquoi un `hostname` ET un `alias` réseau ?** Le backend lit `MINIO_ENDPOINT` (défaut `minio:9000`) dans
-[config.py](../backend/config.py). L'alias garantit que ce nom
-résout, quelle que soit la manière dont Compose préfixe les noms de service.
+| **Client** | **boto3**, via [`clients/object_storage.py`](../backend/clients/object_storage.py). |
+| **Bucket** | `biopsie` — créé par `garage_init`, avec la clé d'accès du backend. |
+| **Port 3900** | API S3 (celle qu'utilisent le backend et le seeder). |
+| **Port 3903** | API d'administration (jeton `GARAGE_ADMIN_TOKEN`). |
+| **Console web** | Aucune. Voir « Diagnostic » ci-dessous. |
+| **Persistance** | Volumes `garage_meta` (métadonnées SQLite) et `garage_data` (objets). |
+| **`garage_init`** | Un Garage neuf n'a ni rôle, ni clé, ni bucket : [`garage/init_garage.py`](../garage/init_garage.py) les crée, de façon idempotente. `Exited (0)` est **normal**. |
 
 ### Organisation du bucket `biopsie`
 
@@ -136,8 +149,10 @@ correction de la difficulté décrite sur la diapositive 11 (« l'extraction
 **Diagnostic**
 
 ```bash
-docker exec p6_minio mc alias set local http://localhost:9000 minioadmin minioadmin
-docker exec p6_minio mc ls --recursive local/biopsie
+docker logs p6_garage_init                     # l'initialisation a-t-elle réussi ?
+docker exec p6_garage /garage status           # état du nœud
+docker exec p6_garage /garage bucket info biopsie
+docker compose exec backend python -c "from clients.object_storage import object_storage as s; print(*s.list_keys(), sep='\n')"
 ```
 
 ---
@@ -212,16 +227,19 @@ volumes:
 ports: ["8002:8002"]
 environment:
   - DATABASE_URL=postgresql://user:password@p6_postgres:5432/p6_db
-  - MINIO_ENDPOINT=minio:9000
-  - MINIO_ACCESS_KEY=minioadmin
-  - MINIO_SECRET_KEY=minioadmin
-  - MINIO_BUCKET_NAME=biopsie
-depends_on: [postgres, minio]
+  - S3_ENDPOINT=http://garage:3900
+  - S3_REGION=garage
+  - S3_ACCESS_KEY=GK...
+  - S3_SECRET_KEY=...
+  - S3_BUCKET=biopsie
+depends_on:
+  postgres: {condition: service_started}
+  garage_init: {condition: service_completed_successfully}
 ```
 
 | | |
 |---|---|
-| **Rôle** | Cœur applicatif. 20 routes REST, orchestration de MinIO / Orthanc / InstanSeg, moteur de workflow, tuilage PyVips, service statique des tuiles. |
+| **Rôle** | Cœur applicatif. 20 routes REST, orchestration de Garage (S3) / Orthanc / InstanSeg, moteur de workflow, tuilage PyVips, service statique des tuiles. |
 | **Base** | `python:3.9-slim` |
 | **Paquets système** | `libvips-dev` (PyVips), `gcc`, `pkg-config`, `python3-dev`, `libc6-dev`, `libgl1`, `libglib2.0-0` |
 | **Code monté en volume** | `./backend:/app` — modifier un `.py` puis `docker compose restart backend` suffit (**pas** de rechargement à chaud : pas de `--reload`). |
@@ -232,7 +250,7 @@ depends_on: [postgres, minio]
 ```
 1. import main.py
      ├─ config.py           lit les variables d'environnement
-     ├─ clients/            Minio(...) + InstanSegClient(...) (httpx, timeout 300 s)
+     ├─ clients/            boto3 (S3) + InstanSegClient(...) (httpx, timeout 300 s)
      ├─ app = FastAPI(lifespan=...)
      ├─ CORSMiddleware  allow_origins=["*"]              ← ouvert à tout
      ├─ mkdir /app/dzi_data ; app.mount("/dzi_data", StaticFiles(...))
@@ -259,15 +277,11 @@ depends_on: [postgres, minio]
 
 ### Configuration lue depuis l'environnement
 
-Le compose déclare `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` et
-`MINIO_BUCKET_NAME`. L'API les lit dans [`config.py`](../backend/config.py),
-avec comme valeurs par défaut celles qui étaient autrefois codées en dur dans
-`main.py`. La liste complète est dans
-[14 — Architecture backend §6](14-architecture-backend.md#6-la-configuration--configpy).
-
-**Incohérence restante :** `seed_images.py` lit l'environnement sous d'autres
-noms ([lignes 33-43](../backend/seed_images.py#L33-L43)) : `MINIO_HOST` au lieu
-de `MINIO_ENDPOINT`. Voir [09 — Pièges, B12](09-pieges-et-bugs.md).
+Le compose déclare `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`,
+`S3_SECRET_KEY` et `S3_BUCKET`, pour le backend **et** pour le seeder. Les deux
+les lisent dans [`config.py`](../backend/config.py). La liste complète est dans
+[14 — Architecture backend §6](14-architecture-backend.md#6-la-configuration--configpy)
+et [15 — Stockage Garage](15-stockage-garage.md).
 
 `DATABASE_URL`, en revanche, est bien lu
 ([database.py:17](../backend/database.py#L17)).
@@ -410,7 +424,7 @@ build: ./backend          ← MÊME image que le backend
 container_name: p6_image_seeder
 command: python seed_images.py
 volumes: [./backend:/app]
-depends_on: [backend, orthanc, minio]
+depends_on: [backend, orthanc, garage_init (terminé avec succès)]
 ```
 
 | | |
@@ -427,7 +441,7 @@ depends_on: [backend, orthanc, minio]
 Pour chaque Biopsy en base :
     le fichier .dzi existe-t-il sur disque ?
         oui  → rien à faire (simple accès disque, coût nul)
-        non  → retrouver la lame source dans MinIO (storage.find_object_key)
+        non  → retrouver la lame source dans Garage (storage.find_object_key)
                la télécharger dans un fichier temporaire
                régénérer la pyramide DZI
                effacer le temporaire
@@ -466,7 +480,7 @@ backend/images_initiales/
                      image-00000.dcm
 ```
 
-Pour chaque lame (`seed_slide`) : MinIO sous `{folder_id}/`, tuiles DZI, lignes
+Pour chaque lame (`seed_slide`) : Garage sous `{folder_id}/`, tuiles DZI, lignes
 `Patient` + `Biopsy`. Le `folder_id` est le **nom de fichier sans extension** —
 aucun patronyme n'est inventé.
 
@@ -478,7 +492,7 @@ Pour chaque DICOM (`seed_dicom`) : push vers Orthanc, lecture des tags, créatio
 
 `depends_on` sans `condition` n'attend pas la disponibilité. D'où
 [`wait_for()`](../backend/seed_images.py#L48-L60) : 60 tentatives, 2 s
-d'intervalle, sur PostgreSQL, MinIO et Orthanc. Si l'un manque après 2 minutes,
+d'intervalle, sur PostgreSQL, Garage et Orthanc. Si l'un manque après 2 minutes,
 le seeder abandonne proprement plutôt que de planter.
 
 > ⚠️ **Fragilité connue.** `wait_for("PostgreSQL", …)` teste seulement la
@@ -505,8 +519,8 @@ docker compose up -d --force-recreate image_seeder   # relancer la passe
 | `7000` | instanseg | API de segmentation | Backend (interne), debug |
 | `8042` | orthanc | API REST / web PACS | Proxy Vite, debug |
 | `4242` | orthanc | DICOM natif (DIMSE) | **personne** |
-| `9000` | minio | API S3 | Backend (interne), debug |
-| `9001` | minio | Console web | Navigateur |
+| `3900` | garage | API S3 | Backend et seeder (interne), client S3 de debug |
+| `3903` | garage | API d'administration | `garage_init` (interne), debug |
 | `5432` | postgres | PostgreSQL | Backend (interne), client SQL |
 | `9091` | *(hors compose)* | **OLGA** — stack séparée | Navigateur |
 

@@ -1,7 +1,7 @@
 # 04 — Architecture backend
 
 **Stack :** Python 3.9 · FastAPI 0.128.8 · SQLAlchemy 2.0.49 · Pydantic 2.13.4 ·
-Alembic 1.16.5 · PyVips 3.1.1 · MinIO 7.2.20 · httpx 0.28.1 · NumPy 2.0.2
+Alembic 1.16.5 · PyVips 3.1.1 · boto3 1.42.97 · httpx 0.28.1 · NumPy 2.0.2
 
 ---
 
@@ -14,13 +14,13 @@ backend/
 ├── migrations.py              32 l.  Alembic « upgrade head » au démarrage
 ├── models.py                 176 l.  Modèles SQLAlchemy (7 tables)
 ├── database.py                38 l.  Engine, SessionLocal, Base, get_db
-├── storage.py                 78 l.  Résolution des lames dans MinIO (PARTAGÉ)
+├── storage.py                 78 l.  Résolution des lames dans Garage (PARTAGÉ)
 ├── seed_images.py            324 l.  Réconciliation des tuiles + injection
 │
 ├── routers/                           Routes HTTP, une par domaine (voir doc 14)
 ├── services/                          Logique métier (voir doc 14)
 ├── schemas/                           Contrats Pydantic (voir doc 14)
-├── clients/                           MinIO, Orthanc, InstanSeg (voir doc 14)
+├── clients/                           S3 (Garage, boto3), Orthanc, InstanSeg (voir doc 14 et 15)
 │
 ├── workflow/                          Moteur de workflow, même découpage
 │   ├── __init__.py             1 l.
@@ -152,7 +152,7 @@ déploiement.
 
 ### Pattern 1 — `run_in_threadpool` pour tout travail synchrone
 
-**Le problème.** PyVips, MinIO et `requests` sont **synchrones**. Appelés
+**Le problème.** PyVips, Garage et `requests` sont **synchrones**. Appelés
 directement depuis une route `async def`, ils bloquent la **boucle d'événements**
 d'uvicorn : l'API entière devient injoignable (`ERR_CONNECTION_RESET`) pendant
 toute la durée de l'opération — plusieurs minutes pour une lame de 500 Mo.
@@ -161,10 +161,8 @@ toute la durée de l'opération — plusieurs minutes pour une lame de 500 Mo.
 un thread séparé.
 
 ```python
-# Envoi vers MinIO — services/biopsies.py
-await run_in_threadpool(
-    minio_client.fput_object, BUCKET_NAME, minio_object_name, str(source_path)
-)
+# Envoi vers Garage (S3) — services/biopsies.py
+await run_in_threadpool(object_storage.upload_file, object_key, str(source_path))
 
 # Tuilage PyVips — services/biopsies.py → services/slide_processing.py
 await run_in_threadpool(
@@ -239,25 +237,25 @@ reste sous `dzi_data`. C'est la seule protection de ce type du backend.
 publiques :
 
 ```python
-candidate_object_keys(minio_client, bucket, folder_id, image_url) -> List[str]
+candidate_object_keys(store, folder_id, image_url) -> List[str]
     # Tous les emplacements possibles, du plus précis au plus large
 
-find_object_key(minio_client, bucket, folder_id, image_url) -> Optional[str]
-    # Le premier qui existe réellement (stat_object, NE TÉLÉCHARGE RIEN)
+find_object_key(store, folder_id, image_url) -> Optional[str]
+    # Le premier qui existe réellement (HEAD S3, NE TÉLÉCHARGE RIEN)
 ```
 
 Pourquoi c'est nécessaire : `Biopsy.image_url` désigne le **fichier DZI**, dont
-le nom ne correspond pas forcément à l'objet MinIO. Et deux dispositions
-coexistent dans le bucket (voir [03 — Docker §2](03-docker.md#2-minio--le-stockage-objet-des-lames)).
+le nom ne correspond pas forcément à l'objet Garage. Et deux dispositions
+coexistent dans le bucket (voir [03 — Docker §2](03-docker.md#2-garage--le-stockage-objet-des-lames)).
 
-`find_object_key` utilise `stat_object` : il vérifie l'existence **sans
+`find_object_key` utilise `store.exists()` (requête HEAD) : il vérifie l'existence **sans
 rapatrier** plusieurs centaines de Mo. `download_biopsy_source` dans `services/biopsies.py`,
 lui, télécharge vraiment et lève une `404` explicite listant les emplacements
 essayés :
 
 ```python
 raise NotFound(
-    "Lame source introuvable dans MinIO pour ce patient. "
+    "Lame source introuvable dans le stockage S3 pour ce patient. "
     f"Emplacements essayes : {', '.join(candidates[:6])}."
 )
 ```
@@ -577,5 +575,5 @@ Le commentaire du code est explicite : *« La base est réellement interrogée :
 jusqu'ici `database: connected` était affirmé sans aucun test, ce qui rendait le
 diagnostic trompeur. »*
 
-> ⚠️ `/health` ne teste **ni MinIO ni Orthanc**. Une lame introuvable ou un PACS
+> ⚠️ `/health` ne teste **ni Garage ni Orthanc**. Une lame introuvable ou un PACS
 > mort ne dégradent pas le statut. C'est une amélioration facile et utile.

@@ -28,7 +28,7 @@ def delete_patient(
     taches: BackgroundTasks,
     db: Session = Depends(database.get_db),
 ):
-    """Supprime le patient, ses fichiers MinIO et ses tuiles (pas ses études Orthanc)."""
+    """Supprime le patient, ses fichiers S3 et ses tuiles (pas ses études Orthanc)."""
     report, differes = patients.delete_patient(db, patient_id)
     if differes:
         taches.add_task(tile_cleanup.effacer_en_arriere_plan, differes)

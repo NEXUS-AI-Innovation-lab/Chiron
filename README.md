@@ -95,7 +95,7 @@ annotations, et s'exporte en PDF.
 ### Biopsie — lames numérisées
 
 Une lame pèse de 100 Mo à plusieurs gigaoctets : impossible à charger dans un
-navigateur. À l'import, Chiron range le fichier source dans **MinIO** puis
+navigateur. À l'import, Chiron range le fichier source dans **Garage** puis
 génère une **pyramide de tuiles DZI** avec PyVips, servie à la demande selon
 le niveau de zoom par **OpenSeadragon**.
 
@@ -104,7 +104,7 @@ le niveau de zoom par **OpenSeadragon**.
 > Elle a lieu à l'import depuis l'interface, et au démarrage des conteneurs :
 > le service `image_seeder` vérifie à chaque lancement que chaque lame
 > enregistrée possède bien ses tuiles, et régénère celles qui manquent depuis
-> la lame source conservée dans MinIO.
+> la lame source conservée dans Garage.
 
 **Un dossier ne porte qu'une lame et qu'un examen radiologique.** Tout le
 reste de l'application travaille sur la première de chaque type ; accepter la
@@ -272,7 +272,7 @@ flowchart TB
 
     subgraph Données
         PG[("PostgreSQL<br/>:5432")]
-        MINIO[("MinIO<br/>:9000")]
+        GARAGE[("Garage S3<br/>:3900")]
         ORTHANC[("Orthanc PACS<br/>:8042")]
         DZI[("Tuiles DZI<br/>disque")]
     end
@@ -284,17 +284,18 @@ flowchart TB
     FE -- REST --> BE
     FE -. formulaires .-> OLGA
     BE --> PG
-    BE --> MINIO
+    BE --> GARAGE
     BE --> ORTHANC
     BE --> DZI
     BE --> IA
-    SEED --> MINIO
+    SEED --> GARAGE
     SEED --> DZI
     SEED --> PG
 ```
 
-Sept conteneurs : `postgres`, `minio`, `orthanc`, `backend`, `instanseg`,
-`frontend`, `image_seeder`.
+Huit conteneurs : `postgres`, `garage`, `garage_init` (initialisation, une
+fois), `orthanc`, `backend`, `instanseg`, `frontend`, `image_seeder`. Le
+stockage objet est détaillé dans [docs/15-stockage-garage.md](docs/15-stockage-garage.md).
 
 ### Choix structurants
 
@@ -326,7 +327,7 @@ Le service `image_seeder` fait deux choses, dans cet ordre :
 
 1. **À chaque démarrage** — il vérifie que chaque lame enregistrée en base
    possède ses tuiles DZI, et **régénère celles qui manquent** depuis la lame
-   source conservée dans MinIO. Les tuiles ne sont pas versionnées : sans cette
+   source conservée dans Garage. Les tuiles ne sont pas versionnées : sans cette
    passe, un dépôt fraîchement cloné puis restauré depuis un dump afficherait
    des visionneuses vides.
 2. **Uniquement si la base est vide** — il injecte les images présentes dans
@@ -347,7 +348,7 @@ Extrait du journal, lorsque des tuiles manquaient :
 |---|---|---|
 | Application | http://localhost:5173 | aucun (voir Sécurité) |
 | API + Swagger | http://localhost:8002/docs | — |
-| Console MinIO | http://localhost:9001 | `minioadmin` / `minioadmin` |
+| Garage (S3) | http://localhost:3900 | clé `S3_ACCESS_KEY` / `S3_SECRET_KEY` (pas de console web) |
 | Orthanc | http://localhost:8042 | `orthanc` / `orthanc` |
 
 Le détail de tous les accès (ports internes, chaîne de connexion PostgreSQL)
@@ -475,7 +476,8 @@ npm run olga:schemas                # régénère les instantanés de formulaire
 | Variable | Service | Rôle |
 |---|---|---|
 | `DATABASE_URL` | backend | Connexion PostgreSQL |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | backend | Stockage objet |
+| `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | backend, image_seeder | Stockage objet Garage |
+| `GARAGE_RPC_SECRET` / `GARAGE_ADMIN_TOKEN` | garage, garage_init | Secrets de Garage |
 | `VITE_API_URL` | frontend | Adresse de l'API |
 | `VITE_OLGA_API_URL` | frontend | Service de formulaires |
 | `SEED_BASE_DIR` / `DZI_FOLDER` | seeder | Chemins, utiles pour les tests |
@@ -538,10 +540,10 @@ backend/
 ├── routers/                Routes HTTP par domaine (patients, biopsies, radiology...)
 ├── services/               Logique métier par domaine
 ├── schemas/                Contrats Pydantic
-├── clients/                Clients MinIO, Orthanc, InstanSeg
+├── clients/                Clients S3 (Garage, boto3), Orthanc, InstanSeg
 ├── models.py               Modèles SQLAlchemy
 ├── database.py             Connexion, session
-├── storage.py              Résolution des lames dans MinIO (partagé)
+├── storage.py              Résolution des lames dans le stockage S3 (partagé)
 ├── seed_images.py          Régénération des tuiles + injection initiale
 ├── workflow/               Moteur d'étapes (même découpage en couches)
 │   ├── router.py           Routes HTTP
@@ -619,10 +621,11 @@ enregistré. Vérifiez sur http://localhost:8042.
 </details>
 
 <details>
-<summary><b>« Lame source introuvable dans MinIO »</b></summary>
+<summary><b>« Lame source introuvable dans le stockage S3 »</b></summary>
 
-Le message liste les emplacements essayés. Vérifiez que l'objet existe :
-console MinIO, bucket `biopsie`.
+Le message liste les emplacements essayés. Vérifiez que l'objet existe dans
+Garage (bucket `biopsie`) : voir [docs/15-stockage-garage.md §9](docs/15-stockage-garage.md#9-inspecter-le-stockage).
+Lame importée du temps de MinIO ? Il faut la migrer (§8 du même document).
 </details>
 
 <details>
@@ -676,7 +679,7 @@ rechargez la page sans cache (Ctrl+Maj+R).
 Les tuiles manquent. Relancez la vérification :
 `docker compose up -d --force-recreate image_seeder`, puis suivez
 `docker logs -f p6_image_seeder`. Si la régénération échoue, c'est que la lame
-source est absente de MinIO — le message le précise.
+source est absente de Garage — le message le précise.
 </details>
 
 <details>

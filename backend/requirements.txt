@@ -8,7 +8,10 @@ pydantic==2.13.4
 python-multipart==0.0.20
 requests==2.32.5
 pyvips==3.1.1
-minio==7.2.20
+# Client S3 (stockage objet Garage). 1.42.x = dernière série compatible
+# Python 3.9.
+boto3==1.42.97
+botocore==1.42.97
 numpy==2.0.2
 
 # Client HTTP du micro-service InstanSeg. Le backend ne fait QUE des appels

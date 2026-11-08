@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 import config
 import models
-from clients.object_storage import BUCKET_NAME, minio_client
+from clients.object_storage import object_storage
 from schemas.patients import PatientCreate
 from services import tile_cleanup
 from services.errors import NotFound
@@ -57,7 +57,7 @@ def create_patient(db: Session, payload: PatientCreate) -> models.Patient:
 def delete_patient(db: Session, patient_id: int) -> Tuple[dict, List[Path]]:
     """Supprime un patient et tout ce qui lui appartient.
 
-    Sont retirés : les objets MinIO rangés sous son dossier, les tuiles DZI
+    Sont retirés : les objets S3 rangés sous son dossier, les tuiles DZI
     de ses biopsies, puis la ligne patient — la cascade ORM emporte biopsies,
     extractions (avec leurs dessins et leur workflow) et études radiologiques.
 
@@ -76,26 +76,24 @@ def delete_patient(db: Session, patient_id: int) -> Tuple[dict, List[Path]]:
     report = {
         "patient": name,
         "folder_id": patient.folder_id,
+        # Clé de réponse conservée telle quelle : le frontend la lit.
         "minio_objects": 0,
         "dzi_paths": 0,
         "orthanc_studies_kept": len(patient.radiology_studies),
         "warnings": [],
     }
 
-    # 1. Objets MinIO rangés sous le dossier du patient (lame + extractions).
+    # 1. Objets S3 rangés sous le dossier du patient (lame + extractions).
     try:
-        keys = [
-            obj.object_name
-            for obj in minio_client.list_objects(BUCKET_NAME, prefix=f"{folder}/", recursive=True)
-        ]
+        keys = list(object_storage.list_keys(prefix=f"{folder}/"))
         for key in keys:
             try:
-                minio_client.remove_object(BUCKET_NAME, key)
+                object_storage.delete(key)
                 report["minio_objects"] += 1
             except Exception as error:
-                report["warnings"].append(f"MinIO {key} : {error}")
+                report["warnings"].append(f"Stockage S3 {key} : {error}")
     except Exception as error:
-        report["warnings"].append(f"MinIO listing : {error}")
+        report["warnings"].append(f"Stockage S3 listing : {error}")
 
     # 2. Tuiles DZI : le dossier du patient, plus le DZI propre à chaque
     #    biopsie (les lames de démonstration sont tuilées à la racine).

@@ -105,7 +105,7 @@ gérée automatiquement par Alembic.
 | `id` | `INTEGER` | non (PK) | Identifiant technique auto-incrémenté. Indexé. |
 | `name` | `VARCHAR` | oui | Nom complet du patient. |
 | `age` | `INTEGER` | oui | Âge en années. Le seeder met `0` faute de mieux. |
-| `folder_id` | `VARCHAR` | oui | **Identifiant fonctionnel du dossier**, utilisé partout dans l'application et comme préfixe de clé MinIO / nom de dossier de tuiles. |
+| `folder_id` | `VARCHAR` | oui | **Identifiant fonctionnel du dossier**, utilisé partout dans l'application et comme préfixe de clé Garage / nom de dossier de tuiles. |
 | `birth_date` | `VARCHAR` | oui | Date de naissance. **Stockée en chaîne**, pas en `DATE`. |
 | `family_history` | `VARCHAR` | oui | Antécédents familiaux. |
 | `medical_history` | `TEXT` | oui | Historique médical / antécédents personnels. |
@@ -121,7 +121,7 @@ folder_id = f"{safe_folder_name(payload.name)}-{uuid.uuid4().hex[:8]}"
 Le `safe_folder_name` ne garde que lettres/chiffres/`-`/`_`/espace, puis
 remplace les espaces par `-`. Ce même identifiant devient :
 
-- le préfixe des objets MinIO : `William-30b14509/CMU-1.svs` ;
+- le préfixe des objets Garage : `William-30b14509/CMU-1.svs` ;
 - le dossier des tuiles : `dzi_data/William-30b14509/CMU-1_files/` ;
 - la clé de rapprochement du seeder (idempotence).
 
@@ -145,7 +145,7 @@ est vide ou réduit à un caractère
 | `image_url` | `VARCHAR` | **Chemin relatif du fichier `.dzi`**, ex. `William-30b14509/CMU-1.dzi`. Résolu par le frontend en `${VITE_API_URL}/dzi_data/{image_url}`. |
 | `status` | `VARCHAR` | Statut libre. Seule valeur écrite par le code : `"Non analysé"` ([services/biopsies.py](../backend/services/biopsies.py), [seed_images.py:118](../backend/seed_images.py#L118)). |
 
-> **`image_url` désigne le DZI, pas l'objet MinIO.** Les deux noms peuvent
+> **`image_url` désigne le DZI, pas l'objet Garage.** Les deux noms peuvent
 > diverger (les lames de démonstration sont tuilées sous d'autres noms). C'est
 > précisément la raison d'être de
 > [`storage.candidate_object_keys()`](../backend/storage.py#L31-L61), qui essaie
@@ -202,7 +202,7 @@ données** :
 | Colonne | Type | Description |
 |---|---|---|
 | `label` | `VARCHAR` | Nom donné par le praticien (« Extraction » par défaut). |
-| `dzi_url` | `VARCHAR` | Chemin de l'extraction : `{folder}/extractions/extraction_{timestamp}.svs`. **Objet MinIO**, pas fichier disque. |
+| `dzi_url` | `VARCHAR` | Chemin de l'extraction : `{folder}/extractions/extraction_{timestamp}.svs`. **Objet Garage**, pas fichier disque. |
 | `x`, `y`, `w`, `h` | `INTEGER` | ROI en **coordonnées pixel de la lame source**. Sert à `fitBounds` à la réouverture. |
 | `created_at` | `TIMESTAMP` | `datetime.utcnow` par défaut. |
 | `owner` | `VARCHAR` | Créateur — vient du `localStorage`, donc **non authentifié**. Contrôle la suppression (`403` si `owner != username`). |
@@ -399,11 +399,11 @@ Seules les deux tables du workflow sont protégées au niveau SQL.
 
 | Ressource | Supprimée ? |
 |---|---|
-| Objets MinIO sous `{folder}/` | ✅ |
+| Objets Garage sous `{folder}/` | ✅ |
 | Tuiles DZI du patient | ✅ (renommées puis effacées en tâche de fond) |
 | Lignes `patients`, `biopsies`, `extractions`, `drawings`, `workflow_*` | ✅ (cascade ORM) |
 | **Études DICOM dans Orthanc** | ❌ **conservées volontairement** |
-| Objets MinIO à la racine du bucket (seeder) | ❌ conservés |
+| Objets Garage à la racine du bucket (seeder) | ❌ conservés |
 
 ---
 
@@ -524,7 +524,7 @@ SELECT * FROM alembic_version;
 
 | Manque | Conséquence |
 |---|---|
-| `UNIQUE` sur `patients.folder_id` | Deux dossiers homonymes casseraient la résolution MinIO et le seeder |
+| `UNIQUE` sur `patients.folder_id` | Deux dossiers homonymes casseraient la résolution Garage et le seeder |
 | `UNIQUE` sur `radiology_studies.orthanc_study_id` | Le garde-fou anti-doublon est purement applicatif |
 | `ON DELETE` sur les FK de `biopsies`, `extractions`, `radiology_studies`, `drawings` | Suppression SQL directe → orphelins |
 | `NOT NULL` sur `patients.name`, `biopsies.image_url` | Des lignes vides sont acceptées |

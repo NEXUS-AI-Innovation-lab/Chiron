@@ -11,7 +11,6 @@ publics dans le dépôt. À ne pas réutiliser en production.
 | Frontend Chiron | http://localhost:5173 | *n'importe lequel* | *n'importe lequel* |
 | API backend (Swagger) | http://localhost:8002/docs | — | — |
 | InstanSeg (API IA) | http://localhost:7001/health | — | — |
-| Console MinIO | http://localhost:9001 | `minioadmin` | `minioadmin` |
 | Orthanc (PACS) | http://localhost:8042 | `orthanc` | `orthanc` |
 
 ## Bases de données et services internes
@@ -19,7 +18,8 @@ publics dans le dépôt. À ne pas réutiliser en production.
 | Service | Accès | Identifiant | Mot de passe |
 |---|---|---|---|
 | PostgreSQL | `localhost:5432`, base `p6_db` | `user` | `password` |
-| MinIO (S3) | `localhost:9000`, bucket `biopsie` | `minioadmin` | `minioadmin` |
+| Garage (S3) | `http://localhost:3900`, région `garage`, bucket `biopsie` | `GK7f5b9f737e5d1f5b2d907639` | `baa7d18ca1d495315d4bf859e05dd3a3f2898ccff58f634c7f309f1764c47939` |
+| Garage (administration) | `http://localhost:3903`, jeton Bearer | — | `e9fa5a405b6f343b8f6db6fdd3043cd75e2f07997317e9c1` |
 | Orthanc DICOM | `localhost:4242` (AET `ORTHANC`) | `orthanc` | `orthanc` |
 
 Chaîne de connexion PostgreSQL utilisée par le backend :

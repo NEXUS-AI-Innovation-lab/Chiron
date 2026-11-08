@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 import config
 import models
-from clients.object_storage import BUCKET_NAME, minio_client
+from clients.object_storage import object_storage
 from schemas.extractions import AnalysisPayload
 from services import slide_processing
 from services.biopsies import download_biopsy_source
@@ -50,7 +50,7 @@ def _get_extraction(db: Session, extraction_id: int, detail: str) -> models.Extr
 
 
 def create_from_region(db: Session, data: AnalysisPayload) -> dict:
-    """Découpe une région de la lame, l'envoie dans MinIO et crée l'extraction.
+    """Découpe une région de la lame, l'envoie dans le stockage S3 et crée l'extraction.
 
     Attention (bug A8 de docs/09-pieges-et-bugs.md) : une erreur de découpage
     ou d'envoi est seulement journalisée, et l'extraction est créée quand même.
@@ -86,16 +86,13 @@ def create_from_region(db: Session, data: AnalysisPayload) -> dict:
                 source_path, data.x, data.y, data.width, data.height, output_path
             )
             try:
-                minio_object_name = f"{safe_folder}/extractions/{filename_str}"
-                minio_client.fput_object(
-                    bucket_name=BUCKET_NAME,
-                    object_name=minio_object_name,
-                    file_path=output_path,
+                object_storage.upload_file(
+                    f"{safe_folder}/extractions/{filename_str}", output_path
                 )
                 if os.path.exists(output_path):
                     os.remove(output_path)
-            except Exception as minio_err:
-                print(f"❌ Erreur MinIO : {minio_err}")
+            except Exception as storage_err:
+                print(f"❌ Erreur stockage S3 : {storage_err}")
         except Exception as e:
             print(f"⚠️ Erreur PyVips: {e}")
         finally:
@@ -169,7 +166,7 @@ def list_for_folder(db: Session, folder_id: str) -> List[dict]:
             "id": e.id,
             "filename": e.label,
             "annotation_label": e.label,
-            # Bug A5 : ce fichier n'existe pas sur le disque (il est dans MinIO).
+            # Bug A5 : ce fichier n'existe pas sur le disque (il est dans le stockage S3).
             "url": f"{config.PUBLIC_API_URL}/dzi_data/{e.dzi_url}",
             "roi": {"x": e.x, "y": e.y, "w": e.w, "h": e.h},
             "diagnosis": e.diagnosis,
@@ -216,7 +213,7 @@ def delete_extraction(db: Session, extraction_id: int, username: str) -> dict:
     if ext.owner != username:
         raise Forbidden("Forbidden")
     try:
-        minio_client.remove_object(BUCKET_NAME, ext.dzi_url)
+        object_storage.delete(ext.dzi_url)
     except Exception:
         pass
     try:

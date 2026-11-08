@@ -18,7 +18,7 @@ async def upload_biopsy(
     file: UploadFile = File(...),
     db: Session = Depends(database.get_db),
 ):
-    """Importe une lame .svs/.tif/.tiff : stockage MinIO puis tuilage DZI."""
+    """Importe une lame .svs/.tif/.tiff : stockage S3 puis tuilage DZI."""
     return await biopsies.import_biopsy(db, patient_id, file)
 
 

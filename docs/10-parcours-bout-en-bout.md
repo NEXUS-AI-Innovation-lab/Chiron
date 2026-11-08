@@ -61,7 +61,7 @@ UTILISATEUR              FRONTEND                  BACKEND                   STO
      │                                     3. extension ∈ {svs,tif,tiff}? → 400
      │                                     4. NamedTemporaryFile
      │  ═══ barre de progression ═══▶        while chunk := await file.read(8 Mo)
-     │                                     5. run_in_threadpool ─────────▶ MinIO
+     │                                     5. run_in_threadpool ─────────▶ Garage
      │                                        fput_object("{folder}/CMU-1.svs")
      │                                     6. run_in_threadpool ─────────▶ disque
      │                                        pyvips ... .dzsave(256, overlap=1, .jpg)
@@ -94,7 +94,7 @@ c'est le principe « les erreurs se voient » bien appliqué.
 | Étape | Protection |
 |---|---|
 | Réception du fichier | Lecture par blocs de 8 Mo, jamais tout en RAM |
-| Envoi MinIO | `run_in_threadpool` |
+| Envoi Garage (S3) | `run_in_threadpool` |
 | Tuilage PyVips | `run_in_threadpool` + `access="sequential"` |
 
 Sans elles : `ERR_CONNECTION_RESET` pendant toute la durée de l'import.
@@ -173,11 +173,11 @@ UTILISATEUR              FRONTEND                    BACKEND                 STO
      │            POST /extract-roi ──────────────▶ extract_roi()         routers/extractions.py
      │            { x, y, width, height,             1. patient par folder_id → 404
      │              patient_folder, owner,           2. mkdir {folder}/extractions/
-     │              annotation_label, drawings,      3. download_biopsy_source() ◀── MinIO
+     │              annotation_label, drawings,      3. download_biopsy_source() ◀── Garage
      │              + tout le formulaire }              (storage.candidate_object_keys)
      │                                                4. pyvips extract_area(x,y,w,h)
      │                                                   .tiffsave(pyramid, bigtiff)
-     │                                                5. fput_object() ─────────▶ MinIO
+     │                                                5. upload_file() ─────────▶ Garage
      │                                                6. os.remove(local)   ⚠️ voir A5
      │                                                7. INSERT extractions ────▶ PostgreSQL
      │            ◀──── { extraction_id: 12 } ───────┘
@@ -196,7 +196,7 @@ annotations changeraient de place à chaque niveau de zoom.
 
 **Ce qu'il faut vraiment retenir : le TIFF extrait n'est jamais affiché.**
 
-Il est produit, poussé dans MinIO, puis effacé du disque. Rouvrir une extraction
+Il est produit, poussé dans Garage, puis effacé du disque. Rouvrir une extraction
 recharge la **lame complète** et la zoome sur le `roi`, avec le déplacement borné
 à cette région. Le TIFF n'existe que comme artefact d'archive.
 
@@ -215,7 +215,7 @@ UTILISATEUR         FRONTEND              BACKEND                    INSTANSEG
      │        POST /analyze-ai ─────▶ analyze_image_with_ai()        routers/analysis.py
      │                                 patient par folder_id           → 404
      │                                 run_in_threadpool(download_biopsy_source)
-     │                                   ◀── MinIO (plusieurs centaines de Mo)
+     │                                   ◀── Garage (plusieurs centaines de Mo)
      │                                 run_in_threadpool(_borner_region)
      │                                   x = max(0, min(data.x, image.width))
      │                                   w = min(data.width, image.width - x)
@@ -418,7 +418,7 @@ POST upload-biopsy     │      POST upload-radiology
         │              │              │
    ┌────▼─────┐        │     ┌────────▼──────────┐
    │ biopsies │        │     │ radiology_studies │
-   │ + MinIO  │        │     │ + Orthanc         │
+   │ + Garage │        │     │ + Orthanc         │
    │ + tuiles │        │     └────────┬──────────┘
    └────┬─────┘        │              │
         │              │       GET/POST /radiology/{id}/report

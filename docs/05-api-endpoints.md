@@ -67,7 +67,7 @@ Vérifie **réellement** chaque dépendance. Implémentation :
 | Détail | Valeur |
 |---|---|
 | Teste | PostgreSQL (`SELECT 1` réel) + InstanSeg (`GET /health`) |
-| Ne teste **pas** | MinIO, Orthanc |
+| Ne teste **pas** | Garage, Orthanc |
 | Code si dégradé | `503`, avec l'erreur exacte dans le corps |
 
 ```bash
@@ -189,8 +189,8 @@ Supprime le dossier **et tout ce qui lui appartient**.
 
 | Supprimé | Conservé |
 |---|---|
-| ✅ Objets MinIO sous `{folder}/` | ❌ **Études DICOM dans Orthanc** |
-| ✅ Tuiles DZI (différé, tâche de fond) | ❌ Objets MinIO à la racine du bucket (seeder) |
+| ✅ Objets Garage sous `{folder}/` | ❌ **Études DICOM dans Orthanc** |
+| ✅ Tuiles DZI (différé, tâche de fond) | ❌ Objets Garage à la racine du bucket (seeder) |
 | ✅ Lignes `patients`, `biopsies`, `extractions`, `drawings`, `workflow_*` | |
 
 **Pourquoi Orthanc est épargné :** *« purger un PACS est une opération à part,
@@ -200,7 +200,7 @@ volontairement laissée hors de ce endpoint »*
 **Erreurs :** `404` — `"Patient introuvable"`
 
 > `warnings` n'est **jamais vide par erreur** : chaque échec partiel y est
-> listé (objet MinIO non supprimé, chemin hors `dzi_data`…) plutôt que de
+> listé (objet Garage non supprimé, chemin hors `dzi_data`…) plutôt que de
 > planter. Le frontend les affiche : *« Supprimé, avec réserves : … »*.
 
 ---
@@ -209,7 +209,7 @@ volontairement laissée hors de ce endpoint »*
 
 ### 6. `POST /patients/{patient_id}/upload-biopsy`
 
-Import d'une lame WSI : MinIO + tuilage DZI + ligne `biopsies`.
+Import d'une lame WSI : Garage + tuilage DZI + ligne `biopsies`.
 
 | | |
 |---|---|
@@ -229,7 +229,7 @@ Import d'une lame WSI : MinIO + tuilage DZI + ligne `biopsies`.
 2. Vérifier qu'il n'a PAS DÉJÀ une lame              → 409
 3. Vérifier l'extension                              → 400
 4. Écrire dans un fichier temporaire système, par blocs de 8 Mo
-5. run_in_threadpool → minio.fput_object("{folder}/{nom}")
+5. run_in_threadpool → object_storage.upload_file("{folder}/{nom}")
 6. run_in_threadpool → pyvips ... .dzsave(tile_size=256, overlap=1, ".jpg")
 7. INSERT biopsies (image_url="{folder}/{stem}.dzi", status="Non analysé")
 8. finally : fermer le fichier, effacer le temporaire
@@ -310,7 +310,7 @@ est bloquant.
 
 ### 8. `DELETE /biopsies/{biopsy_id}`
 
-Supprime la lame : objet MinIO, tuiles, puis la ligne.
+Supprime la lame : objet Garage, tuiles, puis la ligne.
 
 **Réponse 200**
 ```json
@@ -320,7 +320,7 @@ Supprime la lame : objet MinIO, tuiles, puis la ligne.
 
 | Supprimé | Conservé |
 |---|---|
-| ✅ Objet MinIO (via `storage.find_object_key`) | ❌ **Les extractions déjà réalisées** — elles portent leur propre fichier et leur propre compte rendu |
+| ✅ Objet Garage (via `storage.find_object_key`) | ❌ **Les extractions déjà réalisées** — elles portent leur propre fichier et leur propre compte rendu |
 | ✅ `{stem}.dzi` et `{stem}_files/` | |
 | ✅ La ligne `biopsies` | |
 
@@ -446,7 +446,7 @@ Segmente les noyaux d'une région de la lame via InstanSeg.
 | Code | Cause |
 |---|---|
 | `404` | `"Aucune biopsie disponible pour ce patient"` |
-| `404` | `"Lame source introuvable dans MinIO… Emplacements essayes : …"` |
+| `404` | `"Lame source introuvable dans le stockage S3… Emplacements essayes : …"` |
 | `503` | `"Service InstanSeg indisponible : …"` |
 | `500` | Erreur PyVips ou autre |
 
@@ -493,10 +493,10 @@ médical + `drawings`.
 ```
 1. Résoudre le patient par folder_id                          → 404 si absent
 2. mkdir dzi_data/{folder}/extractions/
-3. download_biopsy_source() depuis MinIO                      → 404 si introuvable
+3. download_biopsy_source() depuis Garage                      → 404 si introuvable
 4. pyvips extract_area(x, y, w, h)
    .tiffsave(compression="jpeg", Q=90, tile=True, pyramid=True, bigtiff=True)
-5. minio.fput_object("{folder}/extractions/extraction_{ts}.svs")
+5. object_storage.upload_file("{folder}/extractions/extraction_{ts}.svs")
 6. os.remove(fichier local)          ← LE FICHIER DISPARAÎT DU DISQUE
 7. INSERT extractions (dzi_url, x, y, w, h, owner, + tout le formulaire)
 ```
@@ -515,7 +515,7 @@ médical + `drawings`.
 > qu'un identifiant erroné était transmis. »*
 > ([services/extractions.py](../backend/services/extractions.py))
 
-> ⚠️ **Les erreurs PyVips et MinIO sont avalées** (`except ... print(...)`,
+> ⚠️ **Les erreurs PyVips et Garage sont avalées** (`except ... print(...)`,
 > [services/extractions.py](../backend/services/extractions.py)). L'extraction est **créée en
 > base même si le découpage a échoué**. C'est une violation du principe « les
 > erreurs se voient ». Voir [09 — Pièges](09-pieges-et-bugs.md).
@@ -592,7 +592,7 @@ ses annotations**.
 > 1. `http://localhost:8002` est **codé en dur**
 >    (`list_for_folder()` dans [services/extractions.py](../backend/services/extractions.py)) — inutilisable hors localhost ;
 > 2. Le fichier pointé **n'existe pas sur disque** : `/extract-roi` l'a effacé
->    après l'avoir poussé dans MinIO. Le champ renvoie donc systématiquement un
+>    après l'avoir poussé dans Garage. Le champ renvoie donc systématiquement un
 >    404. Il n'est heureusement **jamais utilisé** par le frontend, qui rouvre la
 >    lame complète zoomée sur le `roi`.
 >
@@ -658,7 +658,7 @@ curl -X DELETE "http://localhost:8002/extractions/12?username=Dr.House"
 > déclaratif.** `username` vient du `localStorage`, sans aucune vérification :
 > n'importe qui peut passer le nom du propriétaire. Aucune valeur de sécurité.
 
-> Les erreurs `404`/`403` sont levées **sans `detail`**, et le nettoyage MinIO /
+> Les erreurs `404`/`403` sont levées **sans `detail`**, et le nettoyage Garage /
 > disque est enveloppé dans des `except: pass` nus
 > (`delete_extraction()` dans [services/extractions.py](../backend/services/extractions.py)) — un objet non supprimé
 > passe totalement inaperçu.
@@ -876,7 +876,7 @@ Code : [`instanseg/api.py`](../instanseg/api.py).
 | `201` | Créé | `POST /patients`, les deux `upload-*` |
 | `400` | Format de fichier refusé, ID manquant | uploads, `/annotations/save` |
 | `403` | Pas propriétaire de l'extraction | `DELETE /extractions/{id}` |
-| `404` | Ressource ou étape inexistante, lame introuvable dans MinIO | la plupart |
+| `404` | Ressource ou étape inexistante, lame introuvable dans Garage | la plupart |
 | `409` | Règle métier : doublon de lame/étude, transition interdite | uploads, workflow |
 | `422` | Validation Pydantic, ou champ de workflow manquant | toutes, workflow |
 | `500` | Erreur inattendue (upload) | `upload-biopsy` |

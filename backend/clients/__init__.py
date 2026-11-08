@@ -1,4 +1,4 @@
-"""Clients des services externes au backend (MinIO, Orthanc, InstanSeg).
+"""Clients des services externes au backend (stockage S3 Garage, Orthanc, InstanSeg).
 
 Chaque module crée UN client partagé par toute l'application. Aucune règle
 métier ici : seulement « comment parler à ce service ».
