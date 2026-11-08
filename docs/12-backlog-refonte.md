@@ -65,6 +65,16 @@ courante, `P2` = à planifier, `P3` = confort.
 | [1.13](#113--get-patients-non-paginé) | `GET /patients` non paginé | P3 | S |
 | [1.14](#114--outillage-python-absent) | Outillage Python absent | P0 | S |
 | [1.15](#115--versions-de-python-divergentes) | Versions de Python divergentes | P2 | S |
+| **⮕ Avancement du bloc 1 après le découpage de `main.py`** (voir [14 — Architecture backend](14-architecture-backend.md)) |
+| 1.1 | ✅ **Fait.** `main.py` fait 70 lignes et ne contient plus aucune route | | |
+| 1.2 | 🟡 **Partiel.** `lifespan` en place et `import main` ne touche plus la base. Pas encore d'app factory : les clients sont toujours créés à l'import | | |
+| 1.3 | 🟡 **Partiel.** Migrations sorties de l'import et isolées dans `migrations.py`, mais toujours lancées au démarrage (par le `lifespan`) | | |
+| 1.4 | 🟡 **Partiel.** `config.py` centralise la configuration de l'API ; `database.py` et `seed_images.py` lisent encore l'environnement eux-mêmes | | |
+| 1.5 | ✅ **Fait côté API.** `clients/orthanc.py` ; le seeder garde ses propres appels | | |
+| 1.6 | 🟡 **Partiel.** L'URL vient de `config.PUBLIC_API_URL`, mais le défaut reste `localhost` | | |
+| 1.7 | ⬜ Non traité (les implémentations ont été déplacées, pas fusionnées) | | |
+| 1.10 | 🟡 **Partiel.** Erreurs métier homogènes via `services/errors.py` ; le workflow garde sa `WorkflowError` | | |
+| 1.11 | 🟡 **Partiel.** `ConfigDict` et `lifespan` en place | | |
 | **2 — Architecture frontend** |
 | [2.1](#21--découper-les-pages-géantes) | Découper les pages géantes | P1 | L |
 | [2.2](#22--trois-clients-http-concurrents) | Trois clients HTTP concurrents | P1 | M |

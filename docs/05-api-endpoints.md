@@ -42,7 +42,7 @@
 ### 1. `GET /health`
 
 Vérifie **réellement** chaque dépendance. Implémentation :
-[main.py:466-496](../backend/main.py#L466-L496).
+[services/health.py](../backend/services/health.py).
 
 **Réponse 200 — tout va bien**
 ```json
@@ -156,7 +156,7 @@ Crée un dossier. Le `folder_id` est **généré par le serveur**, jamais fourni
 
 **Réponse 201 — `PatientSchema`** (avec `biopsies: []` et `radiology_studies: []`)
 
-**Génération du `folder_id`** ([main.py:146](../backend/main.py#L146)) :
+**Génération du `folder_id`** (`create_patient()` dans [services/patients.py](../backend/services/patients.py)) :
 ```python
 folder_id = f"{safe_folder_name(payload.name)}-{uuid.uuid4().hex[:8]}"
 # "Marie Dupont" → "Marie-Dupont-a3f9c1e2"
@@ -195,7 +195,7 @@ Supprime le dossier **et tout ce qui lui appartient**.
 
 **Pourquoi Orthanc est épargné :** *« purger un PACS est une opération à part,
 volontairement laissée hors de ce endpoint »*
-([main.py:956-960](../backend/main.py#L956-L960)).
+(`delete_patient()` dans [services/patients.py](../backend/services/patients.py)).
 
 **Erreurs :** `404` — `"Patient introuvable"`
 
@@ -223,7 +223,7 @@ Import d'une lame WSI : MinIO + tuilage DZI + ligne `biopsies`.
 { "id": 3, "image_url": "Marie-Dupont-a3f9c1e2/CMU-1.dzi", "status": "Non analysé" }
 ```
 
-**Séquence** ([main.py:161-244](../backend/main.py#L161-L244))
+**Séquence** (`import_biopsy()` dans [services/biopsies.py](../backend/services/biopsies.py))
 ```
 1. Vérifier que le patient existe                    → 404
 2. Vérifier qu'il n'a PAS DÉJÀ une lame              → 409
@@ -270,7 +270,7 @@ Import d'un DICOM : relais vers Orthanc + lecture des métadonnées réelles.
   "description": "THORAX AVEC INJECTION", "date": "20260410" }
 ```
 
-**Séquence** ([main.py:247-371](../backend/main.py#L247-L371))
+**Séquence** (`import_dicom()` dans [services/radiology.py](../backend/services/radiology.py))
 ```
 1. Patient existe ?                                            → 404
 2. Le dossier a-t-il déjà une étude ?                          → 409
@@ -437,9 +437,9 @@ Segmente les noyaux d'une région de la lame via InstanSeg.
 
 | Indicateur | Calcul | Code |
 |---|---|---|
-| **Densité cellulaire** | `round(cell_count / (w × h) × 1 000 000)` → cellules / Mpx | [main.py:628-629](../backend/main.py#L628-L629) |
-| **Taille moyenne** | `int(np.mean([inst.area_px]))` en px² | [main.py:619](../backend/main.py#L619) |
-| **Pléomorphisme** | `max > moy × 3` → « Élevé (Atypies cytonucléaires marquées) »<br>`max > moy × 2` → « Modéré »<br>sinon → « Faible (Noyaux réguliers) » | [main.py:622-626](../backend/main.py#L622-L626) |
+| **Densité cellulaire** | `round(cell_count / (w × h) × 1 000 000)` → cellules / Mpx | `_bilan()` · [services/analysis.py](../backend/services/analysis.py) |
+| **Taille moyenne** | `int(np.mean([inst.area_px]))` en px² | `_bilan()` · [services/analysis.py](../backend/services/analysis.py) |
+| **Pléomorphisme** | `max > moy × 3` → « Élevé (Atypies cytonucléaires marquées) »<br>`max > moy × 2` → « Modéré »<br>sinon → « Faible (Noyaux réguliers) » | `_bilan()` · [services/analysis.py](../backend/services/analysis.py) |
 
 **Erreurs**
 
@@ -463,7 +463,7 @@ Segmente les noyaux d'une région de la lame via InstanSeg.
    `cropX`/`cropY` pour les replacer sur la lame.
 
 > **Curiosité du code.** Le backend appelle `segment_points(mode="centroids")`
-> ([main.py:607](../backend/main.py#L607)), alors qu'InstanSeg déclare
+> ([services/analysis.py](../backend/services/analysis.py)), alors qu'InstanSeg déclare
 > `enum=["pixel","polygon","pylgone"]`. Ce n'est **pas** une erreur bloquante :
 > le kwarg `enum` de `Query()` alimente seulement la doc OpenAPI, il ne valide
 > rien à l'exécution. Comme `"centroids" != "pixel"`,
@@ -489,7 +489,7 @@ médical + `drawings`.
 
 (`id` et `extraction_id` portent la même valeur — le frontend essaie les deux.)
 
-**Séquence** ([main.py:685-787](../backend/main.py#L685-L787))
+**Séquence** (`create_from_region()` dans [services/extractions.py](../backend/services/extractions.py))
 ```
 1. Résoudre le patient par folder_id                          → 404 si absent
 2. mkdir dzi_data/{folder}/extractions/
@@ -513,10 +513,10 @@ médical + `drawings`.
 > *« Sur un dossier médical, créer une identité depuis une entrée non
 > authentifiée est inacceptable — et cela produisait des dossiers fantômes dès
 > qu'un identifiant erroné était transmis. »*
-> ([main.py:693-704](../backend/main.py#L693-L704))
+> ([services/extractions.py](../backend/services/extractions.py))
 
 > ⚠️ **Les erreurs PyVips et MinIO sont avalées** (`except ... print(...)`,
-> [main.py:742-746](../backend/main.py#L742-L746)). L'extraction est **créée en
+> [services/extractions.py](../backend/services/extractions.py)). L'extraction est **créée en
 > base même si le découpage a échoué**. C'est une violation du principe « les
 > erreurs se voient ». Voir [09 — Pièges](09-pieges-et-bugs.md).
 
@@ -558,7 +558,7 @@ ses annotations**.
 
 > ⚠️ **Remplacement total des annotations.** La route fait
 > `DELETE FROM drawings WHERE extraction_id = ?` puis réinsère tout
-> ([main.py:825-839](../backend/main.py#L825-L839)). Deux conséquences :
+> (`save_annotations()` dans [services/extractions.py](../backend/services/extractions.py)). Deux conséquences :
 > 1. Les `id` des dessins changent à chaque sauvegarde ;
 > 2. **Deux praticiens qui sauvegardent en même temps s'écrasent mutuellement**
 >    (dernier écrivain gagne) — alors que le projet met en avant l'annotation
@@ -590,7 +590,7 @@ ses annotations**.
 
 > ⚠️ **Deux défauts dans le champ `url` :**
 > 1. `http://localhost:8002` est **codé en dur**
->    ([main.py:858](../backend/main.py#L858)) — inutilisable hors localhost ;
+>    (`list_for_folder()` dans [services/extractions.py](../backend/services/extractions.py)) — inutilisable hors localhost ;
 > 2. Le fichier pointé **n'existe pas sur disque** : `/extract-roi` l'a effacé
 >    après l'avoir poussé dans MinIO. Le champ renvoie donc systématiquement un
 >    404. Il n'est heureusement **jamais utilisé** par le frontend, qui rouvre la
@@ -660,7 +660,7 @@ curl -X DELETE "http://localhost:8002/extractions/12?username=Dr.House"
 
 > Les erreurs `404`/`403` sont levées **sans `detail`**, et le nettoyage MinIO /
 > disque est enveloppé dans des `except: pass` nus
-> ([main.py:928-940](../backend/main.py#L928-L940)) — un objet non supprimé
+> (`delete_extraction()` dans [services/extractions.py](../backend/services/extractions.py)) — un objet non supprimé
 > passe totalement inaperçu.
 
 ---

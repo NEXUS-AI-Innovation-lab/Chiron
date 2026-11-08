@@ -18,7 +18,7 @@ UTILISATEUR                FRONTEND                     BACKEND              STO
      │                        (formulaire contrôlé)
   saisit et valide
      │──────────────▶ createPatient(payload)         services/api.ts:31
-     │                axios.post('/patients') ────────▶ create_patient()      main.py:144
+     │                axios.post('/patients') ────────▶ create_patient()      routers/patients.py
      │                                                  folder_id = safe_folder_name(name)
      │                                                              + "-" + uuid4()[:8]
      │                                                  db.add(Patient) ──────▶ PostgreSQL
@@ -54,7 +54,7 @@ UTILISATEUR              FRONTEND                  BACKEND                   STO
   clic « Importer »
      │──────────▶ uploadMedicalImage(id, 'biopsy', file, setProgress)
      │            FormData + onUploadProgress
-     │            POST /patients/1/upload-biopsy ──▶ upload_biopsy()          main.py:161
+     │            POST /patients/1/upload-biopsy ──▶ upload_biopsy()          routers/biopsies.py
      │                                                │
      │                                     1. patient existe ?         → 404
      │                                     2. patient.biopsies vide ?  → 409 ★
@@ -170,7 +170,7 @@ UTILISATEUR              FRONTEND                    BACKEND                 STO
      │
   nomme l'extraction, clic « Créer l'extraction »
      │──────────▶ handleSaveAction()
-     │            POST /extract-roi ──────────────▶ extract_roi()         main.py:685
+     │            POST /extract-roi ──────────────▶ extract_roi()         routers/extractions.py
      │            { x, y, width, height,             1. patient par folder_id → 404
      │              patient_folder, owner,           2. mkdir {folder}/extractions/
      │              annotation_label, drawings,      3. download_biopsy_source() ◀── MinIO
@@ -212,7 +212,7 @@ UTILISATEUR         FRONTEND              BACKEND                    INSTANSEG
      │        getShapeBounds(shape) → minX, minY, maxX, maxY
      │        cropX/Y/W/H = Math.round(...)
      │        si W>1500 ou H>1500 → message, ARRÊT       ← garde CLIENT
-     │        POST /analyze-ai ─────▶ analyze_image_with_ai()        main.py:547
+     │        POST /analyze-ai ─────▶ analyze_image_with_ai()        routers/analysis.py
      │                                 patient par folder_id           → 404
      │                                 run_in_threadpool(download_biopsy_source)
      │                                   ◀── MinIO (plusieurs centaines de Mo)

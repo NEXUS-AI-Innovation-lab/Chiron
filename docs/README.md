@@ -19,7 +19,7 @@ explicitement.
 | 2 | [08 — Lexique médical](08-lexique-medical.md) | 1 h | Lire le code sans buter sur `sbr_grade`, `HES`, `WSI`, `DZI` |
 | 3 | [03 — Docker](03-docker.md) | 1 h 30 | Démarrer la pile, diagnostiquer un conteneur mort |
 | 4 | [02 — Base de données](02-base-de-donnees.md) | 2 h | Écrire une requête, ajouter une colonne, créer une migration |
-| 5 | [04 — Backend](04-backend.md) | 3 h | Naviguer dans `main.py` et `workflow/`, ajouter une route |
+| 5 | [04 — Backend](04-backend.md) puis [14 — Architecture backend](14-architecture-backend.md) | 3 h 30 | Savoir dans quel fichier se trouve chaque route, ajouter une fonctionnalité dans la bonne couche |
 | 6 | [05 — Endpoints d'API](05-api-endpoints.md) | 2 h | Appeler n'importe quelle route, connaître ses codes d'erreur |
 | 7 | [11 — React + Vite de zéro](11-react-vite-de-zero.md) | 3 h | **Si React vous est inconnu :** comprendre composants, hooks, état, stores, routage |
 | 8 | [06 — Frontend](06-frontend.md) | 3 h | Situer chaque `.tsx` de Chiron, fichier par fichier |
