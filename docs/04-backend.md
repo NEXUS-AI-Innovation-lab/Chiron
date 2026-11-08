@@ -78,7 +78,7 @@ Ce découpage rend le service **testable sans serveur HTTP**.
 ## 2. `database.py` — la connexion
 
 ```python
-_DEFAULT_URL = "postgresql://user:password@p6_postgres:5432/p6_db"
+_DEFAULT_URL = "postgresql://postgres:postgres@host.docker.internal:56322/postgres"  # Supabase
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", _DEFAULT_URL)
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)

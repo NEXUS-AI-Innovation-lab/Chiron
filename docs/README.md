@@ -19,7 +19,7 @@ explicitement.
 | 2 | [08 — Lexique médical](08-lexique-medical.md) | 1 h | Lire le code sans buter sur `sbr_grade`, `HES`, `WSI`, `DZI` |
 | 3 | [03 — Docker](03-docker.md) | 1 h 30 | Démarrer la pile, diagnostiquer un conteneur mort |
 | 4 | [02 — Base de données](02-base-de-donnees.md) | 2 h | Écrire une requête, ajouter une colonne, créer une migration |
-| 5 | [04 — Backend](04-backend.md) puis [14 — Architecture backend](14-architecture-backend.md) et [15 — Stockage Garage](15-stockage-garage.md) | 4 h | Savoir dans quel fichier se trouve chaque route, ajouter une fonctionnalité dans la bonne couche |
+| 5 | [04 — Backend](04-backend.md) puis [14 — Architecture backend](14-architecture-backend.md), [15 — Stockage Garage](15-stockage-garage.md) et [16 — Supabase](16-supabase.md) | 4 h 30 | Savoir dans quel fichier se trouve chaque route, ajouter une fonctionnalité dans la bonne couche |
 | 6 | [05 — Endpoints d'API](05-api-endpoints.md) | 2 h | Appeler n'importe quelle route, connaître ses codes d'erreur |
 | 7 | [11 — React + Vite de zéro](11-react-vite-de-zero.md) | 3 h | **Si React vous est inconnu :** comprendre composants, hooks, état, stores, routage |
 | 8 | [06 — Frontend](06-frontend.md) | 3 h | Situer chaque `.tsx` de Chiron, fichier par fichier |
@@ -78,11 +78,11 @@ solution informatique : conception, développement, validation. »
 
 ### Avertissement de sécurité (état réel, pas objectif)
 
-**L'authentification n'est pas implémentée.** L'identité de l'utilisateur vient
-du `localStorage` du navigateur (clé `biopsie_user`, posée par
-[Login.tsx](../frontend/src/pages/Login.tsx)) et n'est vérifiée par aucun
-service. Le mot de passe saisi n'est jamais transmis. Conséquence directe :
-**ne jamais déposer de données de patients réels.** Détail complet dans
+**Les comptes passent par Supabase Auth** ([16 — Supabase](16-supabase.md)) :
+toutes les routes métier exigent un jeton de session. Mais il n'y a pas encore
+de rôles, les tuiles sont publiques et plusieurs signatures viennent encore du
+navigateur. Conséquence directe : **ne jamais déposer de données de patients
+réels.** Détail complet dans
 [09 — Pièges, dettes et bugs](09-pieges-et-bugs.md#sécurité).
 
 ---

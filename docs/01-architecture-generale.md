@@ -26,7 +26,7 @@
       ▼        ▼         ▼
   ┌────────┐ ┌───────┐ ┌───────────┐   ┌──────────────────┐
   │Postgres│ │Garage │ │ dzi_data/ │   │ InstanSeg :7000  │
-  │ :5432  │ │ :9000 │ │  (disque) │   │ PyTorch, CPU     │
+  │ :56322 │ │ :9000 │ │  (disque) │   │ PyTorch, CPU     │
   └────────┘ └───────┘ └───────────┘   └──────────────────┘
        ▲          ▲          ▲                   ▲
        └──────────┴──────────┴───────────────────┘
@@ -312,7 +312,9 @@ aucun fichier n'existe — il est simplement inutilisé par le frontend. Voir
 | Navigateur | OLGA | `http://localhost:9091` (`VITE_OLGA_API_URL`) | l'OS de l'hôte |
 | Navigateur | Orthanc | `/orthanc/...` | **proxy Vite** → `http://p6_orthanc:8042` |
 | Navigateur | Tuiles DZI | `http://localhost:8002/dzi_data/...` | l'OS de l'hôte |
-| Backend | Postgres | `p6_postgres:5432` | DNS Docker |
+| Backend | Postgres (Supabase) | `host.docker.internal:56322` | port publié sur l'hôte |
+| Backend | Supabase Auth (JWKS) | `host.docker.internal:56321` | clé publique des jetons |
+| Navigateur | Supabase Auth | `127.0.0.1:56321` | comptes, connexion |
 | Backend | Garage (S3) | `http://garage:3900` | nom du service Docker |
 | Backend | Orthanc | `orthanc:8042` | DNS Docker |
 | Backend | InstanSeg | `instanseg:7000` | DNS Docker |

@@ -1427,6 +1427,14 @@ d'une mauvaise manière** sur l'identité de l'utilisateur, voir juste après.
 
 ### 5.4 L'état persistant : `localStorage`
 
+> **Mise à jour (novembre 2026) :** Chiron a maintenant de vrais comptes
+> (Supabase Auth). `biopsie_user` existe toujours, mais il est **écrit par
+> `AuthProvider`** à partir du compte connecté, et les gardes de route sont
+> réelles (`RequireAuth`). Les exemples ci-dessous restent valables pour
+> comprendre `localStorage` et le routage ; l'état actuel est décrit dans
+> [16 — Supabase](16-supabase.md).
+
+
 `localStorage` est un dictionnaire clé/valeur du navigateur, **synchrone**, qui
 ne stocke que des **chaînes de caractères**, et qui survit à la fermeture de
 l'onglet.

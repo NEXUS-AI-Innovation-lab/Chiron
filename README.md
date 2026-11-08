@@ -38,7 +38,8 @@ et un compte rendu anatomopathologique guidé par un protocole en quatre
 étapes que l'application fait respecter.
 
 > [!WARNING]
-> **Projet d'étude.** L'authentification n'est pas implémentée : la
+> **Projet d'étude.** Les comptes et l'authentification passent par
+> Supabase, mais les rôles et plusieurs protections manquent encore : la
 > plateforme ne doit pas héberger de données de patients réels.
 > Voir [Sécurité — état réel](#sécurité--état-réel).
 
@@ -271,7 +272,7 @@ flowchart TB
     end
 
     subgraph Données
-        PG[("PostgreSQL<br/>:5432")]
+        PG[("PostgreSQL Supabase<br/>:56322")]
         GARAGE[("Garage S3<br/>:3900")]
         ORTHANC[("Orthanc PACS<br/>:8042")]
         DZI[("Tuiles DZI<br/>disque")]
@@ -581,10 +582,10 @@ Cette section décrit l'état du projet, pas un objectif.
 
 | Point | État |
 |---|---|
-| Authentification | **Absente.** L'identité vient du stockage local du navigateur et n'est vérifiée par aucun service. |
-| Signature des validations | **Falsifiable.** La traçabilité n'a donc pas de valeur médico-légale. |
+| Authentification | **Supabase Auth** : création de compte, connexion, mot de passe oublié. Toutes les routes métier de l'API exigent un jeton de session valide ([docs/16-supabase.md](docs/16-supabase.md)). |
+| Signature des validations | **En partie falsifiable.** Le propriétaire d'une extraction vient du jeton ; l'auteur des dessins et la signature des comptes rendus viennent encore du navigateur. |
 | Contrôle d'accès par rôle | Absent. Un technicien peut valider l'étape de diagnostic. |
-| Accès aux images | Les tuiles sont servies sans contrôle. |
+| Accès aux images | Les tuiles `/dzi_data` sont servies sans contrôle. |
 | CORS | Ouvert à toutes les origines. |
 | Identifiants des services | Valeurs par défaut, en clair dans le `docker-compose.yml`. |
 | Chiffrement | Aucun : les services communiquent en clair sur le réseau conteneurisé. |
@@ -592,8 +593,9 @@ Cette section décrit l'état du projet, pas un objectif.
 > [!CAUTION]
 > **Conséquence : ne pas déposer de données de patients réels.**
 
-Prochaine étape prévue : authentification par jeton, rôles (technicien,
-pathologiste, radiologue), et contrôle d'accès sur les tuiles.
+Prochaine étape prévue : rôles (technicien, pathologiste, radiologue),
+identité côté serveur pour toutes les signatures, et contrôle d'accès sur les
+tuiles.
 
 ---
 
