@@ -26,6 +26,19 @@ if config.config_file_name is not None:
 target_metadata = database.Base.metadata
 
 
+def include_object(obj, name, type_, reflected, compare_to):
+    """Ignore, pour `--autogenerate`, les tables qu'Alembic ne gère pas.
+
+    La base est celle de Supabase : d'autres objets peuvent exister dans
+    `public` (créés par une migration Supabase, par exemple). Sans ce filtre,
+    Alembic proposerait de les SUPPRIMER parce qu'ils ne sont pas dans
+    models.py.
+    """
+    if type_ == "table" and reflected and compare_to is None:
+        return False
+    return True
+
+
 def get_url() -> str:
     """URL de la base à migrer.
 
@@ -40,6 +53,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=get_url(),
         target_metadata=target_metadata,
+        include_object=include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
@@ -62,6 +76,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            include_object=include_object,
             # Détecte aussi les changements de type de colonne, pas seulement
             # les ajouts et suppressions.
             compare_type=True,

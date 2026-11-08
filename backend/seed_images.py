@@ -246,6 +246,27 @@ def reconcilier_tuiles(db, store: ObjectStorage) -> int:
     return regenerees
 
 
+def synchroniser_sources_demo(store: ObjectStorage) -> int:
+    """Renvoie dans le stockage les lames de demonstration qui y manquent.
+
+    Meme cle que `seed_slide` : ``{nom}/{nom}{ext}``. Ne coute qu'une requete
+    HEAD par lame quand tout est deja en place.
+    """
+    renvoyees = 0
+    for path in sorted(BIOPSIE_DIR.iterdir()):
+        if not (path.is_file() and path.suffix.lower() in SLIDE_EXTENSIONS):
+            continue
+        cle = f"{path.stem}/{path.name}"
+        try:
+            if not store.exists(cle):
+                print(f"[>] envoi S3 : {cle}")
+                store.upload_file(cle, str(path))
+                renvoyees += 1
+        except Exception as erreur:
+            print(f"[echec] envoi de {cle} : {erreur}")
+    return renvoyees
+
+
 def main() -> None:
     store = object_storage
 
@@ -267,6 +288,15 @@ def main() -> None:
 
     # Normalement deja cree par garage/init_garage.py : filet de securite.
     store.ensure_bucket()
+
+    # Passe systematique, base vide ou non : les lames de demonstration doivent
+    # etre dans le stockage objet. Apres un changement de stockage (MinIO vers
+    # Garage), la base est deja peuplee mais le nouveau bucket est vide : sans
+    # cette passe, l'analyse IA et les extractions repondraient 404.
+    if BIOPSIE_DIR.is_dir():
+        print("\n--- LAMES SOURCES DANS LE STOCKAGE ---")
+        renvoyees = synchroniser_sources_demo(store)
+        print(f"[=] {renvoyees} lame(s) de demonstration renvoyee(s)")
 
     db = database.SessionLocal()
     try:

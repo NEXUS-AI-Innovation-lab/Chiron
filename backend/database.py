@@ -12,7 +12,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Repli de développement uniquement. En déploiement, `DATABASE_URL` prime.
-_DEFAULT_URL = "postgresql://user:password@p6_postgres:5432/p6_db"
+# Base Postgres de Supabase (supabase start), vue depuis un conteneur Docker.
+_DEFAULT_URL = "postgresql://postgres:postgres@host.docker.internal:56322/postgres"
 
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", _DEFAULT_URL)
 
